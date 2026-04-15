@@ -41,8 +41,8 @@ body {
   transform: scaleX(-1);
 }
 
-/* ── Privacy mode: video hidden ── */
-#container.privacy-on #video { visibility: hidden; }
+/* ── Privacy mode: video invisible but still readable by TF.js ── */
+#container.privacy-on #video { opacity: 0; }
 
 /* ── Status bar (top 4px) ── */
 #status-bar {
@@ -414,6 +414,20 @@ body {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+#result-save {
+  margin-top: 16px;
+  background: #32cd32;
+  color: #0a0a1a;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 2px 12px rgba(50,205,50,0.3);
+}
+#result-save:active { transform: scale(0.97); }
 #result-new {
   margin-top: 10px;
   background: #64c8ff;
@@ -554,9 +568,12 @@ body {
     <div class="rc-row"><span class="rc-label">Stance Phase</span><span class="rc-value" id="r-stance">--</span></div>
     <div class="rc-row"><span class="rc-label">Duration</span><span class="rc-value" id="r-duration">--</span></div>
   </div>
+  <button id="result-save">Save Result Image</button>
   <button id="result-new">New Analysis</button>
   <button id="result-close">Close</button>
 </div>
+<!-- Hidden canvas for image export -->
+<canvas id="export-canvas" style="display:none"></canvas>
 
 <!-- ====== TensorFlow.js + MoveNet ====== -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
@@ -769,6 +786,7 @@ let recordStart=0, recordDuration=0;
 let lastMetrics=null, finalMetrics=null;
 let privacyMode=false;
 let selectedFacing='environment';
+let lastSkeletonSnapshot=null; // canvas ImageData captured at stop
 
 // ── Camera selection ──
 document.querySelectorAll('.cam-option').forEach(el=>{
@@ -934,6 +952,8 @@ document.getElementById('action-btn').addEventListener('click',()=>{
     appState='done';
     recordDuration=(performance.now()-recordStart)/1000;
     finalMetrics=lastMetrics;
+    // Capture skeleton snapshot (black bg + skeleton from current canvas)
+    captureSkeletonSnapshot();
     document.getElementById('action-btn').textContent='New Analysis';
     document.getElementById('action-btn').classList.remove('recording');
     document.getElementById('action-btn').classList.add('done');
@@ -1014,6 +1034,176 @@ document.getElementById('btn-privacy').addEventListener('click',()=>{
     container.classList.remove('privacy-on');
   }
 });
+
+// ── Save result image ──
+document.getElementById('result-save').addEventListener('click', saveResultImage);
+
+function captureSkeletonSnapshot(){
+  // Draw skeleton on black background and save as image data
+  const sw=canvas.width, sh=canvas.height;
+  const snapCanvas=document.createElement('canvas');
+  snapCanvas.width=sw; snapCanvas.height=sh;
+  const sctx=snapCanvas.getContext('2d');
+  // Black background
+  sctx.fillStyle='#0a0a1a';
+  sctx.fillRect(0,0,sw,sh);
+  // Copy current skeleton from main canvas (already has skeleton drawn)
+  sctx.drawImage(canvas,0,0);
+  lastSkeletonSnapshot=snapCanvas;
+}
+
+function saveResultImage(){
+  const m=finalMetrics;
+  if(!m&&!lastSkeletonSnapshot){alert('No analysis data');return;}
+
+  const W=1080, H=1920; // portrait HD
+  const ec=document.getElementById('export-canvas');
+  ec.width=W; ec.height=H;
+  const c=ec.getContext('2d');
+
+  // Background
+  c.fillStyle='#0a0a1a';
+  c.fillRect(0,0,W,H);
+
+  // ── Top section: Skeleton image ──
+  const skelH=Math.floor(H*0.45);
+  if(lastSkeletonSnapshot){
+    // Draw skeleton snapshot scaled to fit
+    const srcW=lastSkeletonSnapshot.width, srcH=lastSkeletonSnapshot.height;
+    const scale=Math.min(W/srcW, skelH/srcH);
+    const dw=srcW*scale, dh=srcH*scale;
+    const dx=(W-dw)/2, dy=(skelH-dh)/2;
+    c.drawImage(lastSkeletonSnapshot, dx, dy, dw, dh);
+  }
+
+  // Separator line
+  let y=skelH+10;
+  c.strokeStyle='rgba(100,200,255,0.3)';
+  c.lineWidth=1;
+  c.beginPath(); c.moveTo(40,y); c.lineTo(W-40,y); c.stroke();
+
+  // ── Header ──
+  y+=40;
+  c.font='bold 36px -apple-system, sans-serif';
+  c.fillStyle='#64c8ff';
+  c.textAlign='center';
+  c.fillText('Dignif-Eye Gait Analysis', W/2, y);
+
+  y+=28;
+  c.font='16px -apple-system, sans-serif';
+  c.fillStyle='#888';
+  const now=new Date();
+  c.fillText(now.toLocaleDateString('ko-KR')+' '+now.toLocaleTimeString('ko-KR'), W/2, y);
+
+  // ── Speed (big) ──
+  y+=50;
+  const si=m?speedInfo(m.speedMps):{label:'N/A',color:'#888'};
+  c.font='bold 56px -apple-system, sans-serif';
+  c.fillStyle=si.color;
+  c.fillText(m&&m.speedMps>0?m.speedMps.toFixed(3)+' m/s':'-- m/s', W/2, y);
+
+  y+=32;
+  c.font='bold 20px -apple-system, sans-serif';
+  c.fillStyle=si.color;
+  c.fillText('WHO-ICOPE: '+si.label, W/2, y);
+
+  // ── WHO gauge bar ──
+  y+=20;
+  const gx=80, gw=W-160, gh=10;
+  const grd=c.createLinearGradient(gx,0,gx+gw,0);
+  grd.addColorStop(0,'#ff3333'); grd.addColorStop(0.3,'#ff3333');
+  grd.addColorStop(0.3,'#ff8800'); grd.addColorStop(0.4,'#ff8800');
+  grd.addColorStop(0.4,'#ffcc00'); grd.addColorStop(0.5,'#ffcc00');
+  grd.addColorStop(0.5,'#32cd32'); grd.addColorStop(1,'#32cd32');
+  c.fillStyle=grd;
+  c.beginPath(); c.roundRect(gx,y,gw,gh,5); c.fill();
+  if(m&&m.speedMps>0){
+    const mx=gx+Math.min(m.speedMps/2,1)*gw;
+    c.fillStyle='#fff';
+    c.fillRect(mx-2,y-3,4,gh+6);
+  }
+
+  // ── Results table ──
+  y+=50;
+  c.textAlign='left';
+
+  function drawSection(title, rows){
+    c.font='bold 14px -apple-system, sans-serif';
+    c.fillStyle='#64c8ff';
+    c.fillText(title.toUpperCase(), 60, y);
+    y+=4;
+    c.strokeStyle='rgba(100,200,255,0.15)';
+    c.beginPath(); c.moveTo(60,y); c.lineTo(W-60,y); c.stroke();
+    y+=24;
+
+    for(const[label,value]of rows){
+      c.font='15px -apple-system, sans-serif';
+      c.fillStyle='#a0a0c0';
+      c.fillText(label, 80, y);
+      c.fillStyle='#eef';
+      c.font='bold 15px -apple-system, sans-serif';
+      c.textAlign='right';
+      c.fillText(value, W-80, y);
+      c.textAlign='left';
+      y+=28;
+    }
+    y+=8;
+  }
+
+  if(m){
+    const mm=Math.floor(recordDuration/60),ss=Math.floor(recordDuration%60);
+    drawSection('Spatiotemporal',[
+      ['Cadence', m.cadence>0?m.cadence.toFixed(1)+' spm':'--'],
+      ['Stride Time', m.strideTime>0?m.strideTime.toFixed(3)+' s':'--'],
+      ['Step Length', m.stepLength>0?m.stepLength.toFixed(1)+' px':'--'],
+      ['Symmetry', m.symmetry.toFixed(1)+' %'],
+      ['Variability', m.variability.toFixed(1)+' CV%'],
+    ]);
+    drawSection('Kinematics',[
+      ['Trunk Lean', m.trunkLean.toFixed(1)+' deg'],
+      ['Hip Angle (L/R)', m.hipL.toFixed(0)+' / '+m.hipR.toFixed(0)+' deg'],
+      ['Knee Angle (L/R)', m.kneeL.toFixed(0)+' / '+m.kneeR.toFixed(0)+' deg'],
+    ]);
+    drawSection('Gait Phase',[
+      ['Stance Phase', m.stancePct.toFixed(1)+' %'],
+      ['Swing Phase', m.swingPct.toFixed(1)+' %'],
+      ['Double Support', m.doublePct.toFixed(1)+' %'],
+      ['Duration', mm+'m '+ss+'s'],
+    ]);
+  }
+
+  // ── Footer ──
+  c.textAlign='center';
+  c.font='12px -apple-system, sans-serif';
+  c.fillStyle='#555';
+  c.fillText('Dignif-Eye | Privacy Protected | Skeleton Only', W/2, H-20);
+
+  // ── Download / Share ──
+  ec.toBlob(function(blob){
+    if(!blob) return;
+    const file=new File([blob],'dignif-eye-result.png',{type:'image/png'});
+
+    // Try Web Share API first (works on iOS/Android)
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:'Dignif-Eye Result'}).catch(()=>{
+        fallbackDownload(blob);
+      });
+    }else{
+      fallbackDownload(blob);
+    }
+  },'image/png');
+}
+
+function fallbackDownload(blob){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='dignif-eye-result.png';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
 
 // ── Camera switch ──
 document.getElementById('btn-camera-switch').addEventListener('click',async()=>{
