@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<title>Dignif-Eye - Real-time Gait Analysis Demo</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦿</text></svg>">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a1a;
+  color: #e0e0f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Pretendard', sans-serif;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* ── Container ── */
+#container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+}
+#video {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+#canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  transform: scaleX(-1);
+}
+
+/* ── Privacy mode: video hidden ── */
+#container.privacy-on #video { visibility: hidden; }
+
+/* ── Status bar (top 4px) ── */
+#status-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  z-index: 20;
+  background: #444;
+  transition: background 0.3s;
+}
+
+/* ── Header ── */
+#header {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 14px 16px 8px;
+  background: linear-gradient(to bottom, rgba(10,10,26,0.88), transparent);
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #64c8ff;
+  letter-spacing: 0.5px;
+}
+#fps-badge {
+  font-size: 11px;
+  color: #888;
+  background: rgba(255,255,255,0.08);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* ── Control bar (top-right buttons) ── */
+#controls {
+  position: absolute;
+  top: 48px; right: 12px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+.ctrl-btn {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #ccc;
+  font-size: 11px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.ctrl-btn:active { background: rgba(255,255,255,0.2); }
+.ctrl-btn.active {
+  background: rgba(100,200,255,0.2);
+  border-color: #64c8ff;
+  color: #64c8ff;
+}
+.ctrl-btn.danger {
+  background: rgba(255,60,60,0.15);
+  border-color: rgba(255,60,60,0.4);
+  color: #ff6666;
+}
+
+/* ── Analysis state indicator ── */
+#analysis-state {
+  position: absolute;
+  top: 48px; left: 12px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #888;
+  background: rgba(0,0,0,0.4);
+  padding: 6px 12px;
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+#state-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #555;
+  transition: background 0.3s;
+}
+#state-dot.recording {
+  background: #ff4444;
+  animation: pulse 1s ease-in-out infinite;
+}
+#state-dot.done { background: #32cd32; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Speed display (bottom panel) ── */
+#panel {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: linear-gradient(to top, rgba(10,10,26,0.94) 60%, rgba(10,10,26,0.7) 85%, transparent);
+  padding: 50px 16px 16px;
+  z-index: 10;
+  transition: opacity 0.3s;
+}
+#panel.hidden { opacity: 0.3; }
+
+#speed-display { text-align: center; margin: 4px 0; }
+#speed-value {
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  transition: color 0.3s;
+}
+#speed-unit { font-size: 14px; color: #888; margin-left: 2px; }
+#speed-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 2px;
+  transition: color 0.3s;
+}
+
+/* WHO-ICOPE gauge */
+#speed-gauge {
+  height: 6px;
+  border-radius: 3px;
+  margin: 8px 0 4px;
+  position: relative;
+  background: linear-gradient(to right,
+    #ff3333 0%, #ff3333 30%,
+    #ff8800 30%, #ff8800 40%,
+    #ffcc00 40%, #ffcc00 50%,
+    #32cd32 50%, #32cd32 100%);
+  overflow: visible;
+}
+#speed-gauge::before {
+  content: '0.6';
+  position: absolute; left: 29%; top: 10px;
+  font-size: 9px; color: #666;
+  transform: translateX(-50%);
+}
+#speed-gauge::after {
+  content: '1.0';
+  position: absolute; left: 50%; top: 10px;
+  font-size: 9px; color: #666;
+  transform: translateX(-50%);
+}
+#speed-marker {
+  position: absolute;
+  top: -4px;
+  width: 4px; height: 14px;
+  background: #fff;
+  border-radius: 2px;
+  transition: left 0.25s ease-out;
+  box-shadow: 0 0 4px rgba(255,255,255,0.5);
+}
+
+/* Metrics grid */
+.section-title {
+  font-size: 10px;
+  color: #64c8ff;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 10px 0 3px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(100,200,255,0.12);
+}
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 16px;
+}
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2.5px 0;
+  font-size: 12px;
+}
+.metric-label { color: #a0a0c0; }
+.metric-value {
+  color: #dde;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Action button (start / stop) ── */
+#action-area {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 12px 16px;
+  z-index: 12;
+  pointer-events: none;
+}
+#action-btn {
+  pointer-events: auto;
+  background: #64c8ff;
+  color: #0a0a1a;
+  border: none;
+  padding: 13px 36px;
+  border-radius: 25px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(100,200,255,0.3);
+}
+#action-btn:active { transform: scale(0.96); }
+#action-btn.recording {
+  background: #ff4444;
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(255,60,60,0.3);
+}
+#action-btn.done {
+  background: rgba(255,255,255,0.1);
+  color: #888;
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+/* ── Timer ── */
+#timer {
+  position: absolute;
+  top: 80px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 18px;
+  font-weight: 600;
+  color: #ff6666;
+  font-variant-numeric: tabular-nums;
+  z-index: 15;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#timer.show { opacity: 1; }
+
+/* ── Start screen ── */
+#start-screen {
+  position: absolute;
+  inset: 0;
+  background: #0a0a1a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: opacity 0.5s;
+}
+#start-screen.hidden { opacity: 0; pointer-events: none; }
+.logo-text {
+  font-size: 32px;
+  font-weight: 700;
+  color: #64c8ff;
+  margin-bottom: 4px;
+  letter-spacing: 1px;
+}
+.logo-sub {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 40px;
+}
+#start-btn {
+  background: #64c8ff;
+  color: #0a0a1a;
+  border: none;
+  padding: 15px 44px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.2s;
+}
+#start-btn:active { background: #4ab0e8; transform: scale(0.97); }
+#loading-text {
+  color: #666;
+  font-size: 12px;
+  margin-top: 16px;
+  display: none;
+}
+.camera-select {
+  margin-bottom: 24px;
+  display: flex;
+  gap: 10px;
+}
+.cam-option {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #aaa;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.2s;
+}
+.cam-option.selected {
+  background: rgba(100,200,255,0.15);
+  border-color: #64c8ff;
+  color: #64c8ff;
+}
+
+/* ── Result overlay ── */
+#result-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10,10,26,0.92);
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+#result-overlay.show { display: flex; }
+#result-overlay h2 {
+  font-size: 20px;
+  color: #64c8ff;
+  margin-bottom: 20px;
+}
+.result-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 16px 20px;
+  width: 100%;
+  max-width: 340px;
+  margin-bottom: 12px;
+}
+.result-card .rc-title {
+  font-size: 11px;
+  color: #64c8ff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.result-card .rc-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.result-card .rc-label { color: #a0a0c0; }
+.result-card .rc-value { color: #eef; font-weight: 500; }
+.result-card .rc-big {
+  font-size: 28px;
+  font-weight: 700;
+  text-align: center;
+  margin: 4px 0;
+}
+#result-close {
+  margin-top: 20px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #ccc;
+  padding: 12px 32px;
+  border-radius: 12px;
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#result-new {
+  margin-top: 10px;
+  background: #64c8ff;
+  color: #0a0a1a;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Guide ── */
+#guide {
+  position: absolute;
+  top: 45%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.6s;
+  pointer-events: none;
+}
+#guide.show { opacity: 1; }
+#guide p {
+  color: rgba(255,255,255,0.65);
+  font-size: 14px;
+  line-height: 1.6;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+}
+</style>
+</head>
+<body>
+
+<!-- ====== Start Screen ====== -->
+<div id="start-screen">
+  <div class="logo-text">Dignif-Eye</div>
+  <div class="logo-sub">Real-time Skeleton Gait Analysis</div>
+  <div class="camera-select">
+    <div class="cam-option selected" data-facing="environment">Rear Cam</div>
+    <div class="cam-option" data-facing="user">Front Cam</div>
+  </div>
+  <button id="start-btn">Start Camera</button>
+  <div id="loading-text">Loading MoveNet model...</div>
+</div>
+
+<!-- ====== Main Screen ====== -->
+<div id="container">
+  <div id="status-bar"></div>
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="canvas"></canvas>
+
+  <div id="header">
+    <h1>Dignif-Eye</h1>
+    <span id="fps-badge">-- FPS</span>
+  </div>
+
+  <!-- State indicator -->
+  <div id="analysis-state">
+    <div id="state-dot"></div>
+    <span id="state-text">Ready</span>
+  </div>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button class="ctrl-btn" id="btn-privacy">Skeleton</button>
+    <button class="ctrl-btn" id="btn-camera-switch">Switch Cam</button>
+  </div>
+
+  <!-- Timer -->
+  <div id="timer">00:00</div>
+
+  <!-- Guide -->
+  <div id="guide">
+    <p>Stand 2-3m away from the camera<br>Walk naturally for analysis</p>
+  </div>
+
+  <!-- Analysis Panel -->
+  <div id="panel" class="hidden">
+    <div id="speed-display">
+      <span id="speed-value">--</span><span id="speed-unit">m/s</span>
+      <div id="speed-label">Waiting for analysis</div>
+    </div>
+    <div id="speed-gauge"><div id="speed-marker" style="left:0%"></div></div>
+
+    <div class="section-title">Spatiotemporal</div>
+    <div class="metrics-grid">
+      <div class="metric-row"><span class="metric-label">Cadence</span><span class="metric-value" id="m-cadence">--</span></div>
+      <div class="metric-row"><span class="metric-label">Stride Time</span><span class="metric-value" id="m-stride-time">--</span></div>
+      <div class="metric-row"><span class="metric-label">Step Length</span><span class="metric-value" id="m-step-length">--</span></div>
+      <div class="metric-row"><span class="metric-label">Symmetry</span><span class="metric-value" id="m-symmetry">--</span></div>
+    </div>
+
+    <div class="section-title">Kinematics</div>
+    <div class="metrics-grid">
+      <div class="metric-row"><span class="metric-label">Trunk Lean</span><span class="metric-value" id="m-trunk">--</span></div>
+      <div class="metric-row"><span class="metric-label">Knee L/R</span><span class="metric-value" id="m-knee">--</span></div>
+      <div class="metric-row"><span class="metric-label">Hip L/R</span><span class="metric-value" id="m-hip">--</span></div>
+      <div class="metric-row"><span class="metric-label">Variability</span><span class="metric-value" id="m-var">--</span></div>
+    </div>
+
+    <div class="section-title">Gait Phase</div>
+    <div class="metrics-grid">
+      <div class="metric-row"><span class="metric-label">Stance</span><span class="metric-value" id="m-stance">--</span></div>
+      <div class="metric-row"><span class="metric-label">Swing</span><span class="metric-value" id="m-swing">--</span></div>
+      <div class="metric-row"><span class="metric-label">Dbl Support</span><span class="metric-value" id="m-double">--</span></div>
+      <div class="metric-row"><span class="metric-label">Status</span><span class="metric-value" id="m-status">--</span></div>
+    </div>
+  </div>
+
+  <!-- Action Button -->
+  <div id="action-area">
+    <button id="action-btn">Start Analysis</button>
+  </div>
+</div>
+
+<!-- ====== Result Overlay ====== -->
+<div id="result-overlay">
+  <h2>Analysis Complete</h2>
+  <div class="result-card">
+    <div class="rc-title">Walking Speed (WHO-ICOPE)</div>
+    <div class="rc-big" id="r-speed">--</div>
+    <div class="rc-row"><span class="rc-label">Rating</span><span class="rc-value" id="r-rating">--</span></div>
+  </div>
+  <div class="result-card">
+    <div class="rc-title">Spatiotemporal Parameters</div>
+    <div class="rc-row"><span class="rc-label">Cadence</span><span class="rc-value" id="r-cadence">--</span></div>
+    <div class="rc-row"><span class="rc-label">Stride Time</span><span class="rc-value" id="r-stride">--</span></div>
+    <div class="rc-row"><span class="rc-label">Step Length</span><span class="rc-value" id="r-step">--</span></div>
+    <div class="rc-row"><span class="rc-label">Symmetry</span><span class="rc-value" id="r-sym">--</span></div>
+    <div class="rc-row"><span class="rc-label">Variability</span><span class="rc-value" id="r-var">--</span></div>
+  </div>
+  <div class="result-card">
+    <div class="rc-title">Kinematics / Phase</div>
+    <div class="rc-row"><span class="rc-label">Trunk Lean</span><span class="rc-value" id="r-trunk">--</span></div>
+    <div class="rc-row"><span class="rc-label">Knee (L/R)</span><span class="rc-value" id="r-knee">--</span></div>
+    <div class="rc-row"><span class="rc-label">Stance Phase</span><span class="rc-value" id="r-stance">--</span></div>
+    <div class="rc-row"><span class="rc-label">Duration</span><span class="rc-value" id="r-duration">--</span></div>
+  </div>
+  <button id="result-new">New Analysis</button>
+  <button id="result-close">Close</button>
+</div>
+
+<!-- ====== TensorFlow.js + MoveNet ====== -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  COCO 17 Keypoints
+// ═══════════════════════════════════════════════════════════
+const NOSE=0,L_EYE=1,R_EYE=2,L_EAR=3,R_EAR=4;
+const L_SHOULDER=5,R_SHOULDER=6,L_ELBOW=7,R_ELBOW=8;
+const L_WRIST=9,R_WRIST=10,L_HIP=11,R_HIP=12;
+const L_KNEE=13,R_KNEE=14,L_ANKLE=15,R_ANKLE=16;
+
+const SKELETON=[
+  [NOSE,L_EYE],[NOSE,R_EYE],[L_EYE,L_EAR],[R_EYE,R_EAR],
+  [L_SHOULDER,R_SHOULDER],
+  [L_SHOULDER,L_ELBOW],[L_ELBOW,L_WRIST],
+  [R_SHOULDER,R_ELBOW],[R_ELBOW,R_WRIST],
+  [L_SHOULDER,L_HIP],[R_SHOULDER,R_HIP],[L_HIP,R_HIP],
+  [L_HIP,L_KNEE],[L_KNEE,L_ANKLE],
+  [R_HIP,R_KNEE],[R_KNEE,R_ANKLE],
+];
+
+function jColor(i){
+  if(i<=4) return [200,200,200];
+  if(i<=6) return [50,180,255];
+  if(i<=10)return [100,220,255];
+  if(i<=12)return [50,255,50];
+  if(i<=14)return [255,200,50];
+  return [255,100,50];
+}
+
+const SPEED_SEVERE=0.6,SPEED_THRESH=0.8,SPEED_CAUTION=1.0;
+function speedInfo(s){
+  if(s<=0) return{label:'N/A',color:'#888'};
+  if(s<SPEED_SEVERE) return{label:'SEVERE',color:'#ff3333'};
+  if(s<SPEED_THRESH) return{label:'WARNING',color:'#ff6600'};
+  if(s<SPEED_CAUTION)return{label:'CAUTION',color:'#ffcc00'};
+  return{label:'NORMAL',color:'#32cd32'};
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Gait Analyzer (JS port of gait_analyzer.py)
+// ═══════════════════════════════════════════════════════════
+class GaitAnalyzer{
+  constructor(){
+    this.BS=180; this.fps=30;
+    this.hipH=[]; this.lAY=[]; this.rAY=[];
+    this.lAX=[]; this.rAX=[]; this.sCX=[];
+    this.kpBuf=[]; this.stHist=[]; this.hSamples=[];
+    this.ppm=null; this.fc=0;
+  }
+  update(kps){
+    this.fc++;
+    if(!kps||kps.length<17) return null;
+    const lH=kps[L_HIP],rH=kps[R_HIP];
+    const hx=(lH.x+rH.x)/2, hy=(lH.y+rH.y)/2;
+    this._p(this.hipH,[hx,hy]);
+    this._p(this.lAY,kps[L_ANKLE].y); this._p(this.rAY,kps[R_ANKLE].y);
+    this._p(this.lAX,kps[L_ANKLE].x); this._p(this.rAX,kps[R_ANKLE].x);
+    this._p(this.sCX,(kps[L_SHOULDER].x+kps[R_SHOULDER].x)/2);
+    this._p(this.kpBuf,kps);
+    this._calH(kps);
+    if(this.lAY.length<60) return null;
+    return this._compute(kps);
+  }
+  _p(a,v){a.push(v);if(a.length>this.BS)a.shift();}
+  _calH(kps){
+    const n=kps[NOSE],la=kps[L_ANKLE],ra=kps[R_ANKLE];
+    if(n.score>0.3&&la.score>0.3&&ra.score>0.3){
+      const h=Math.max(la.y,ra.y)-n.y;
+      if(h>50){this.hSamples.push(h);if(this.hSamples.length>60)this.hSamples.shift();
+        this.ppm=this._med(this.hSamples)/1.65;}
+    }
+  }
+  _compute(kps){
+    const m={};
+    // Speed
+    let spf=0;
+    if(this.hipH.length>10){
+      const d=[];
+      for(let i=1;i<this.hipH.length;i++){
+        const dx=this.hipH[i][0]-this.hipH[i-1][0],dy=this.hipH[i][1]-this.hipH[i-1][1];
+        d.push(Math.sqrt(dx*dx+dy*dy));
+      }
+      const s=[...d].sort((a,b)=>a-b);
+      const q1=Math.floor(s.length*0.25),q3=Math.floor(s.length*0.75);
+      const st=s.slice(q1,q3);
+      spf=st.length>0?st.reduce((a,b)=>a+b,0)/st.length:0;
+    }
+    m.speedPxF=spf;
+    m.speedMps=this.ppm&&this.ppm>0?(spf*this.fps/this.ppm):0;
+
+    // Peaks
+    const lP=this._peaks(this.lAY), rP=this._peaks(this.rAY);
+    const lS=this._iv(lP), rS=this._iv(rP);
+    const aS=[...lS,...rS];
+    m.strideTime=0; m.cadence=0;
+    if(aS.length>0){
+      const med=this._med(aS);
+      const v=aS.filter(s=>s>med*0.5&&s<med*1.5);
+      if(v.length>0){
+        const avg=v.reduce((a,b)=>a+b,0)/v.length;
+        m.strideTime=avg/this.fps;
+        if(m.strideTime>0){const c=120/m.strideTime;if(c>=50&&c<=160)m.cadence=c;}
+        v.forEach(x=>{this.stHist.push(x/this.fps);if(this.stHist.length>30)this.stHist.shift();});
+      }
+    }
+
+    // Step length
+    const ap=[...lP,...rP].sort((a,b)=>a-b);
+    m.stepLength=0;
+    if(ap.length>1&&this.kpBuf.length>0){
+      const ls=new Set(lP); const sv=[];
+      for(let i=0;i<ap.length-1;i++){
+        const f1=ap[i],f2=ap[i+1];
+        const j1=ls.has(f1)?L_ANKLE:R_ANKLE,j2=ls.has(f2)?L_ANKLE:R_ANKLE;
+        const b1=Math.min(f1,this.kpBuf.length-1),b2=Math.min(f2,this.kpBuf.length-1);
+        if(b1>=0&&b2>=0&&this.kpBuf[b1]&&this.kpBuf[b2])
+          sv.push(Math.abs(this.kpBuf[b2][j2].x-this.kpBuf[b1][j1].x));
+      }
+      if(sv.length>0)m.stepLength=sv.reduce((a,b)=>a+b,0)/sv.length;
+    }
+
+    // Symmetry
+    m.symmetry=0;
+    if(lS.length>0&&rS.length>0){
+      const lm=lS.reduce((a,b)=>a+b,0)/lS.length,rm=rS.reduce((a,b)=>a+b,0)/rS.length;
+      const dn=lm+rm; if(dn>0)m.symmetry=Math.min(2*Math.abs(rm-lm)/dn*100,50);
+    }
+
+    // Variability
+    m.variability=0;
+    if(this.stHist.length>=3){
+      const a=this.stHist,mn=a.reduce((x,y)=>x+y,0)/a.length;
+      if(mn>0){const sd=Math.sqrt(a.reduce((x,y)=>x+(y-mn)*(y-mn),0)/a.length);m.variability=(sd/mn)*100;}
+    }
+
+    // Joint angles
+    m.hipL=this._ang(kps[L_SHOULDER],kps[L_HIP],kps[L_KNEE]);
+    m.hipR=this._ang(kps[R_SHOULDER],kps[R_HIP],kps[R_KNEE]);
+    m.kneeL=this._ang(kps[L_HIP],kps[L_KNEE],kps[L_ANKLE]);
+    m.kneeR=this._ang(kps[R_HIP],kps[R_KNEE],kps[R_ANKLE]);
+
+    // Trunk lean
+    const sm={x:(kps[L_SHOULDER].x+kps[R_SHOULDER].x)/2,y:(kps[L_SHOULDER].y+kps[R_SHOULDER].y)/2};
+    const hm={x:(kps[L_HIP].x+kps[R_HIP].x)/2,y:(kps[L_HIP].y+kps[R_HIP].y)/2};
+    const tx=sm.x-hm.x,ty=sm.y-hm.y,tl=Math.sqrt(tx*tx+ty*ty)+1e-8;
+    m.trunkLean=Math.acos(Math.max(-1,Math.min(1,(ty*-1)/tl)))*180/Math.PI;
+
+    // Gait phases
+    const n=Math.min(this.lAY.length,this.rAY.length);
+    const lSl=this.lAY.slice(-n),rSl=this.rAY.slice(-n);
+    const lt=this._med(lSl),rt=this._med(rSl);
+    let stN=0,dbN=0;
+    for(let i=0;i<n;i++){const ls=lSl[i]>=lt,rs=rSl[i]>=rt;if(ls||rs)stN++;if(ls&&rs)dbN++;}
+    m.stancePct=(stN/n)*100; m.swingPct=100-m.stancePct; m.doublePct=(dbN/n)*100;
+
+    // Status
+    let w=0;
+    if(m.symmetry>10)w+=2;else if(m.symmetry>5)w++;
+    if(m.variability>8)w+=2;else if(m.variability>5)w++;
+    if(m.cadence>0&&(m.cadence<90||m.cadence>130))w++;
+    m.status=w>=3?'warning':w>=1?'caution':'normal';
+    return m;
+  }
+  _peaks(a){
+    if(a.length<10)return[];
+    const md=Math.floor(this.fps*0.35),rng=Math.max(...a)-Math.min(...a);
+    const pr=Math.max(8,rng*0.15),pk=[];
+    for(let i=1;i<a.length-1;i++){
+      if(a[i]>a[i-1]&&a[i]>a[i+1]){
+        const lm=Math.min(...a.slice(Math.max(0,i-md),i));
+        const rm=Math.min(...a.slice(i+1,Math.min(a.length,i+md+1)));
+        if(a[i]-Math.max(lm,rm)>=pr)pk.push(i);
+      }
+    }
+    const f=[];for(const p of pk){if(!f.length||p-f[f.length-1]>=md)f.push(p);}return f;
+  }
+  _iv(p){const r=[];for(let i=1;i<p.length;i++)r.push(p[i]-p[i-1]);return r;}
+  _ang(a,b,c){
+    if(a.score<0.3||b.score<0.3||c.score<0.3)return 0;
+    const v1x=a.x-b.x,v1y=a.y-b.y,v2x=c.x-b.x,v2y=c.y-b.y;
+    const d=v1x*v2x+v1y*v2y,l1=Math.sqrt(v1x*v1x+v1y*v1y)+1e-8,l2=Math.sqrt(v2x*v2x+v2y*v2y)+1e-8;
+    return Math.acos(Math.max(-1,Math.min(1,d/(l1*l2))))*180/Math.PI;
+  }
+  _med(a){if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y),m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2;}
+  reset(){
+    this.hipH=[];this.lAY=[];this.rAY=[];this.lAX=[];this.rAX=[];
+    this.sCX=[];this.kpBuf=[];this.stHist=[];this.hSamples=[];
+    this.ppm=null;this.fc=0;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  App State & DOM
+// ═══════════════════════════════════════════════════════════
+const video=document.getElementById('video');
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+
+let detector=null, analyzer=new GaitAnalyzer();
+let lastTime=performance.now(), fpsSmooth=0;
+let trailPts=[];
+
+// App state: 'idle' | 'recording' | 'done'
+let appState='idle';
+let recordStart=0, recordDuration=0;
+let lastMetrics=null, finalMetrics=null;
+let privacyMode=false;
+let selectedFacing='environment';
+
+// ── Camera selection ──
+document.querySelectorAll('.cam-option').forEach(el=>{
+  el.addEventListener('click',()=>{
+    document.querySelectorAll('.cam-option').forEach(e=>e.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedFacing=el.dataset.facing;
+  });
+});
+
+// ── Start button ──
+document.getElementById('start-btn').addEventListener('click', startApp);
+
+async function startApp(){
+  const btn=document.getElementById('start-btn');
+  btn.disabled=true; btn.textContent='Loading...';
+  document.getElementById('loading-text').style.display='block';
+
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:selectedFacing,width:{ideal:1280},height:{ideal:720}},audio:false
+    });
+    video.srcObject=stream; await video.play();
+    const settings=stream.getVideoTracks()[0].getSettings();
+    if(settings.frameRate) analyzer.fps=settings.frameRate;
+    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+
+    document.getElementById('loading-text').textContent='Loading MoveNet Lightning...';
+    detector=await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      {modelType:poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING}
+    );
+
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('guide').classList.add('show');
+    setTimeout(()=>document.getElementById('guide').classList.remove('show'),4000);
+    detect();
+  }catch(e){
+    alert('Error: '+e.message);
+    btn.disabled=false; btn.textContent='Retry';
+    document.getElementById('loading-text').style.display='none';
+  }
+}
+
+// ── Main loop ──
+async function detect(){
+  if(!detector)return;
+  const poses=await detector.estimatePoses(video);
+  const now=performance.now(), dt=now-lastTime;
+  lastTime=now; fpsSmooth=fpsSmooth*0.9+(1000/dt)*0.1;
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Privacy mode: draw black background
+  if(privacyMode){
+    ctx.fillStyle='#0a0a1a';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  let metrics=null;
+  if(poses.length>0&&poses[0].keypoints){
+    const kps=poses[0].keypoints;
+    drawSkeleton(kps);
+    if(appState==='recording') metrics=analyzer.update(kps);
+    else if(appState==='idle') metrics=analyzer.update(kps); // live preview
+  }
+
+  if(metrics) lastMetrics=metrics;
+  updateUI(lastMetrics);
+
+  // Timer
+  if(appState==='recording'){
+    const elapsed=(now-recordStart)/1000;
+    const mm=String(Math.floor(elapsed/60)).padStart(2,'0');
+    const ss=String(Math.floor(elapsed%60)).padStart(2,'0');
+    document.getElementById('timer').textContent=mm+':'+ss;
+  }
+
+  requestAnimationFrame(detect);
+}
+
+// ── Skeleton drawing ──
+function drawSkeleton(kps){
+  for(const[i,j]of SKELETON){
+    const p1=kps[i],p2=kps[j];
+    if(p1.score>0.3&&p2.score>0.3){
+      const c=jColor(Math.max(i,j));
+      ctx.strokeStyle=`rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.lineWidth=(i>=L_HIP&&j>=L_HIP)?4:3;
+      ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+    }
+  }
+  for(let i=0;i<17;i++){
+    const p=kps[i];
+    if(p.score>0.3){
+      const c=jColor(i),r=i>=L_HIP?7:5;
+      ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
+    }
+  }
+  // Trail
+  const la=kps[L_ANKLE];
+  if(la.score>0.3){trailPts.push({x:la.x,y:la.y});if(trailPts.length>50)trailPts.shift();}
+  for(let i=1;i<trailPts.length;i++){
+    const a=i/trailPts.length;
+    ctx.strokeStyle=`rgba(${Math.floor(50+200*a)},${Math.floor(100*(1-a))},${Math.floor(255*a)},${a})`;
+    ctx.lineWidth=Math.max(1,Math.floor(3*a));
+    ctx.beginPath(); ctx.moveTo(trailPts[i-1].x,trailPts[i-1].y); ctx.lineTo(trailPts[i].x,trailPts[i].y); ctx.stroke();
+  }
+}
+
+// ── UI update ──
+function updateUI(m){
+  document.getElementById('fps-badge').textContent=Math.round(fpsSmooth)+' FPS';
+  if(!m){return;}
+  const si=speedInfo(m.speedMps);
+  document.getElementById('speed-value').textContent=m.speedMps>0?m.speedMps.toFixed(2):'--';
+  document.getElementById('speed-value').style.color=si.color;
+  document.getElementById('speed-label').textContent='WHO-ICOPE: '+si.label;
+  document.getElementById('speed-label').style.color=si.color;
+  document.getElementById('speed-marker').style.left=Math.min(m.speedMps/2*100,100)+'%';
+
+  const sc={normal:'#32cd32',caution:'#ffcc00',warning:'#ff3333'};
+  document.getElementById('status-bar').style.background=sc[m.status]||'#444';
+
+  document.getElementById('m-cadence').textContent=m.cadence>0?m.cadence.toFixed(0)+' spm':'--';
+  document.getElementById('m-stride-time').textContent=m.strideTime>0?m.strideTime.toFixed(2)+' s':'--';
+  document.getElementById('m-step-length').textContent=m.stepLength>0?m.stepLength.toFixed(0)+' px':'--';
+  document.getElementById('m-symmetry').textContent=m.symmetry.toFixed(1)+' %';
+  document.getElementById('m-trunk').textContent=m.trunkLean.toFixed(1)+' deg';
+  document.getElementById('m-knee').textContent=m.kneeL.toFixed(0)+' / '+m.kneeR.toFixed(0);
+  document.getElementById('m-hip').textContent=m.hipL.toFixed(0)+' / '+m.hipR.toFixed(0);
+  document.getElementById('m-var').textContent=m.variability.toFixed(1)+' CV%';
+  document.getElementById('m-stance').textContent=m.stancePct.toFixed(1)+' %';
+  document.getElementById('m-swing').textContent=m.swingPct.toFixed(1)+' %';
+  document.getElementById('m-double').textContent=m.doublePct.toFixed(1)+' %';
+  document.getElementById('m-status').textContent=m.status.toUpperCase();
+  document.getElementById('m-status').style.color=sc[m.status]||'#dde';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Controls
+// ═══════════════════════════════════════════════════════════
+
+// ── Action button: Start / Stop Analysis ──
+document.getElementById('action-btn').addEventListener('click',()=>{
+  if(appState==='idle'){
+    // Start recording
+    appState='recording';
+    recordStart=performance.now();
+    analyzer.reset(); trailPts=[]; lastMetrics=null;
+    document.getElementById('action-btn').textContent='Stop Analysis';
+    document.getElementById('action-btn').classList.add('recording');
+    document.getElementById('state-dot').className='recording';
+    document.getElementById('state-text').textContent='Recording...';
+    document.getElementById('timer').classList.add('show');
+    document.getElementById('panel').classList.remove('hidden');
+    document.getElementById('guide').classList.remove('show');
+  } else if(appState==='recording'){
+    // Stop and show results
+    appState='done';
+    recordDuration=(performance.now()-recordStart)/1000;
+    finalMetrics=lastMetrics;
+    document.getElementById('action-btn').textContent='New Analysis';
+    document.getElementById('action-btn').classList.remove('recording');
+    document.getElementById('action-btn').classList.add('done');
+    document.getElementById('state-dot').className='done';
+    document.getElementById('state-text').textContent='Complete';
+    document.getElementById('timer').classList.remove('show');
+    showResults();
+  } else {
+    // Reset for new
+    resetToIdle();
+  }
+});
+
+function resetToIdle(){
+  appState='idle';
+  analyzer.reset(); trailPts=[]; lastMetrics=null; finalMetrics=null;
+  document.getElementById('action-btn').textContent='Start Analysis';
+  document.getElementById('action-btn').classList.remove('recording','done');
+  document.getElementById('state-dot').className='';
+  document.getElementById('state-text').textContent='Ready';
+  document.getElementById('timer').classList.remove('show');
+  document.getElementById('timer').textContent='00:00';
+  document.getElementById('panel').classList.add('hidden');
+  document.getElementById('result-overlay').classList.remove('show');
+  // Reset metric displays
+  ['m-cadence','m-stride-time','m-step-length','m-symmetry','m-trunk','m-knee','m-hip','m-var','m-stance','m-swing','m-double','m-status'].forEach(id=>{
+    document.getElementById(id).textContent='--';
+  });
+  document.getElementById('speed-value').textContent='--';
+  document.getElementById('speed-value').style.color='#dde';
+  document.getElementById('speed-label').textContent='Waiting for analysis';
+  document.getElementById('speed-label').style.color='#888';
+  document.getElementById('speed-marker').style.left='0%';
+  document.getElementById('status-bar').style.background='#444';
+}
+
+function showResults(){
+  const m=finalMetrics;
+  const ov=document.getElementById('result-overlay');
+  if(!m){ov.classList.add('show');return;}
+  const si=speedInfo(m.speedMps);
+  document.getElementById('r-speed').textContent=m.speedMps>0?m.speedMps.toFixed(3)+' m/s':'N/A';
+  document.getElementById('r-speed').style.color=si.color;
+  document.getElementById('r-rating').textContent=si.label;
+  document.getElementById('r-rating').style.color=si.color;
+  document.getElementById('r-cadence').textContent=m.cadence>0?m.cadence.toFixed(1)+' spm':'--';
+  document.getElementById('r-stride').textContent=m.strideTime>0?m.strideTime.toFixed(3)+' s':'--';
+  document.getElementById('r-step').textContent=m.stepLength>0?m.stepLength.toFixed(1)+' px':'--';
+  document.getElementById('r-sym').textContent=m.symmetry.toFixed(1)+' %';
+  document.getElementById('r-var').textContent=m.variability.toFixed(1)+' CV%';
+  document.getElementById('r-trunk').textContent=m.trunkLean.toFixed(1)+' deg';
+  document.getElementById('r-knee').textContent=m.kneeL.toFixed(0)+' / '+m.kneeR.toFixed(0)+' deg';
+  document.getElementById('r-stance').textContent=m.stancePct.toFixed(1)+' %';
+  const mm=Math.floor(recordDuration/60),ss=Math.floor(recordDuration%60);
+  document.getElementById('r-duration').textContent=`${mm}m ${ss}s`;
+  ov.classList.add('show');
+}
+
+document.getElementById('result-close').addEventListener('click',()=>{
+  document.getElementById('result-overlay').classList.remove('show');
+});
+document.getElementById('result-new').addEventListener('click',()=>{
+  resetToIdle();
+});
+
+// ── Privacy (Skeleton) toggle ──
+document.getElementById('btn-privacy').addEventListener('click',()=>{
+  privacyMode=!privacyMode;
+  const btn=document.getElementById('btn-privacy');
+  const container=document.getElementById('container');
+  if(privacyMode){
+    btn.classList.add('active');
+    btn.textContent='Skeleton ON';
+    container.classList.add('privacy-on');
+  }else{
+    btn.classList.remove('active');
+    btn.textContent='Skeleton';
+    container.classList.remove('privacy-on');
+  }
+});
+
+// ── Camera switch ──
+document.getElementById('btn-camera-switch').addEventListener('click',async()=>{
+  selectedFacing=selectedFacing==='environment'?'user':'environment';
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:selectedFacing,width:{ideal:1280},height:{ideal:720}},audio:false
+    });
+    // Stop old tracks
+    video.srcObject.getTracks().forEach(t=>t.stop());
+    video.srcObject=stream; await video.play();
+    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+    const settings=stream.getVideoTracks()[0].getSettings();
+    if(settings.frameRate) analyzer.fps=settings.frameRate;
+  }catch(e){
+    console.warn('Camera switch failed:',e);
+  }
+});
+</script>
+</body>
+</html>
