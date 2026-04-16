@@ -2,30 +2,31 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="robots" content="noindex, nofollow">
-<title>Dignif-Eye - Real-time Gait Analysis Demo</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦿</text></svg>">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Dignif-Eye - 실시간 보행 분석</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   background: #0a0a1a;
   color: #e0e0f0;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Pretendard', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', sans-serif;
   overflow: hidden;
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
-  height: 100vh;
-  height: 100dvh;
 }
-
-/* ── Container ── */
 #container {
   position: relative;
   width: 100vw;
   height: 100vh;
-  height: 100dvh;
+  overflow: hidden;
+}
+#video-canvas-wrap {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  transform-origin: center center;
+  will-change: transform;
 }
 #video {
   position: absolute;
@@ -41,255 +42,107 @@ body {
   transform: scaleX(-1);
 }
 
-/* ── Privacy mode: video invisible but still readable by TF.js ── */
-#container.privacy-on #video { opacity: 0; }
-
-/* ── Status bar (top 4px) ── */
-#status-bar {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 4px;
-  z-index: 20;
-  background: #444;
-  transition: background 0.3s;
-}
-
-/* ── Header ── */
+/* 상단 헤더 */
 #header {
   position: absolute;
   top: 0; left: 0; right: 0;
-  padding: 14px 16px 8px;
-  background: linear-gradient(to bottom, rgba(10,10,26,0.88), transparent);
+  padding: 12px 16px;
+  background: linear-gradient(to bottom, rgba(10,10,26,0.85), transparent);
   z-index: 10;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 #header h1 {
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
   color: #64c8ff;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
 }
 #fps-badge {
   font-size: 11px;
   color: #888;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.1);
   padding: 2px 8px;
   border-radius: 10px;
 }
 
-/* ── Control bar (top-right buttons) ── */
-#controls {
+/* 상태 바 (상단 4px) */
+#status-bar {
   position: absolute;
-  top: 48px; right: 12px;
-  z-index: 15;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-end;
-}
-.ctrl-btn {
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.15);
-  color: #ccc;
-  font-size: 11px;
-  padding: 7px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-.ctrl-btn:active { background: rgba(255,255,255,0.2); }
-.ctrl-btn.active {
-  background: rgba(100,200,255,0.2);
-  border-color: #64c8ff;
-  color: #64c8ff;
-}
-.ctrl-btn.danger {
-  background: rgba(255,60,60,0.15);
-  border-color: rgba(255,60,60,0.4);
-  color: #ff6666;
-}
-
-/* ── Analysis state indicator ── */
-#analysis-state {
-  position: absolute;
-  top: 48px; left: 12px;
-  z-index: 15;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #888;
-  background: rgba(0,0,0,0.4);
-  padding: 6px 12px;
-  border-radius: 8px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-#state-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #555;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  z-index: 20;
   transition: background 0.3s;
 }
-#state-dot.recording {
-  background: #ff4444;
-  animation: pulse 1s ease-in-out infinite;
-}
-#state-dot.done { background: #32cd32; }
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
 
-/* ── Speed display (bottom panel) ── */
+/* 줌 레벨 표시 */
+#zoom-indicator {
+  position: absolute;
+  top: 60px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  padding: 4px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 15;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+#zoom-indicator.show { opacity: 1; }
+
+/* 분석 패널 */
 #panel {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  background: linear-gradient(to top, rgba(10,10,26,0.94) 60%, rgba(10,10,26,0.7) 85%, transparent);
-  padding: 50px 16px 16px;
+  background: linear-gradient(to top, rgba(10,10,26,0.92), rgba(10,10,26,0.7), transparent);
+  padding: 60px 16px 20px;
   z-index: 10;
-  transition: opacity 0.3s;
-}
-#panel.hidden { opacity: 0.3; }
-
-#speed-display { text-align: center; margin: 4px 0; }
-#speed-value {
-  font-size: 38px;
-  font-weight: 700;
-  letter-spacing: -1px;
-  transition: color 0.3s;
-}
-#speed-unit { font-size: 14px; color: #888; margin-left: 2px; }
-#speed-label {
-  font-size: 13px;
-  font-weight: 600;
-  margin-top: 2px;
-  transition: color 0.3s;
-}
-
-/* WHO-ICOPE gauge */
-#speed-gauge {
-  height: 6px;
-  border-radius: 3px;
-  margin: 8px 0 4px;
-  position: relative;
-  background: linear-gradient(to right,
-    #ff3333 0%, #ff3333 30%,
-    #ff8800 30%, #ff8800 40%,
-    #ffcc00 40%, #ffcc00 50%,
-    #32cd32 50%, #32cd32 100%);
-  overflow: visible;
-}
-#speed-gauge::before {
-  content: '0.6';
-  position: absolute; left: 29%; top: 10px;
-  font-size: 9px; color: #666;
-  transform: translateX(-50%);
-}
-#speed-gauge::after {
-  content: '1.0';
-  position: absolute; left: 50%; top: 10px;
-  font-size: 9px; color: #666;
-  transform: translateX(-50%);
-}
-#speed-marker {
-  position: absolute;
-  top: -4px;
-  width: 4px; height: 14px;
-  background: #fff;
-  border-radius: 2px;
-  transition: left 0.25s ease-out;
-  box-shadow: 0 0 4px rgba(255,255,255,0.5);
-}
-
-/* Metrics grid */
-.section-title {
-  font-size: 10px;
-  color: #64c8ff;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  margin: 10px 0 3px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(100,200,255,0.12);
-}
-.metrics-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px 16px;
 }
 .metric-row {
   display: flex;
   justify-content: space-between;
-  padding: 2.5px 0;
-  font-size: 12px;
+  padding: 3px 0;
+  font-size: 16px;
 }
 .metric-label { color: #a0a0c0; }
-.metric-value {
-  color: #dde;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
+.metric-value { color: #dde; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.section-title {
+  font-size: 14px;
+  color: #64c8ff;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 10px 0 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(100,200,255,0.15);
 }
 
-/* ── Action button (start / stop) ── */
-#action-area {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  display: flex;
-  justify-content: center;
-  padding: 12px 16px;
-  z-index: 12;
-  pointer-events: none;
+/* 속도 대형 표시 */
+#speed-display {
+  text-align: center;
+  margin: 6px 0 4px;
 }
-#action-btn {
-  pointer-events: auto;
-  background: #64c8ff;
-  color: #0a0a1a;
-  border: none;
-  padding: 13px 36px;
-  border-radius: 25px;
-  font-size: 15px;
+#speed-value {
+  font-size: 44px;
   font-weight: 700;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  letter-spacing: 0.5px;
-  transition: all 0.2s;
-  box-shadow: 0 4px 20px rgba(100,200,255,0.3);
+  letter-spacing: -1px;
 }
-#action-btn:active { transform: scale(0.96); }
-#action-btn.recording {
-  background: #ff4444;
-  color: #fff;
-  box-shadow: 0 4px 20px rgba(255,60,60,0.3);
-}
-#action-btn.done {
-  background: rgba(255,255,255,0.1);
-  color: #888;
-  box-shadow: none;
-  border: 1px solid rgba(255,255,255,0.15);
-}
-
-/* ── Timer ── */
-#timer {
-  position: absolute;
-  top: 80px; left: 50%;
-  transform: translateX(-50%);
+#speed-unit {
   font-size: 18px;
-  font-weight: 600;
-  color: #ff6666;
-  font-variant-numeric: tabular-nums;
-  z-index: 15;
-  opacity: 0;
-  transition: opacity 0.3s;
+  color: #888;
+  margin-left: 4px;
 }
-#timer.show { opacity: 1; }
+#speed-label {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 2px;
+}
 
-/* ── Start screen ── */
+/* 시작 화면 */
 #start-screen {
   position: absolute;
   inset: 0;
@@ -302,331 +155,212 @@ body {
   transition: opacity 0.5s;
 }
 #start-screen.hidden { opacity: 0; pointer-events: none; }
-.logo-text {
-  font-size: 32px;
-  font-weight: 700;
-  color: #64c8ff;
-  margin-bottom: 4px;
-  letter-spacing: 1px;
-}
-.logo-sub {
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 40px;
-}
+#start-screen h1 { font-size: 28px; color: #64c8ff; margin-bottom: 8px; }
+#start-screen p { color: #888; font-size: 15px; margin-bottom: 30px; }
 #start-btn {
   background: #64c8ff;
   color: #0a0a1a;
   border: none;
-  padding: 15px 44px;
-  border-radius: 14px;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: all 0.2s;
-}
-#start-btn:active { background: #4ab0e8; transform: scale(0.97); }
-#loading-text {
-  color: #666;
-  font-size: 12px;
-  margin-top: 16px;
-  display: none;
-}
-.camera-select {
-  margin-bottom: 16px;
-  display: flex;
-  gap: 10px;
-}
-.height-input-area {
-  margin-bottom: 24px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.height-input-area label {
-  font-size: 13px;
-  color: #aaa;
-}
-#height-input {
-  width: 70px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.06);
-  color: #eee;
-  font-size: 14px;
-  text-align: center;
-  -webkit-appearance: none;
-}
-#height-input:focus {
-  outline: none;
-  border-color: #64c8ff;
-}
-.height-unit {
-  font-size: 13px;
-  color: #888;
-}
-.cam-option {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #aaa;
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-size: 13px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: all 0.2s;
-}
-.cam-option.selected {
-  background: rgba(100,200,255,0.15);
-  border-color: #64c8ff;
-  color: #64c8ff;
-}
-
-/* ── Result overlay ── */
-#result-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(10,10,26,0.92);
-  z-index: 50;
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-#result-overlay.show { display: flex; }
-#result-overlay h2 {
-  font-size: 20px;
-  color: #64c8ff;
-  margin-bottom: 20px;
-}
-.result-card {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  padding: 14px 40px;
   border-radius: 12px;
-  padding: 16px 20px;
-  width: 100%;
-  max-width: 340px;
-  margin-bottom: 12px;
-}
-.result-card .rc-title {
-  font-size: 11px;
-  color: #64c8ff;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 8px;
-}
-.result-card .rc-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 3px 0;
-  font-size: 13px;
-}
-.result-card .rc-label { color: #a0a0c0; }
-.result-card .rc-value { color: #eef; font-weight: 500; }
-.result-card .rc-big {
-  font-size: 28px;
-  font-weight: 700;
-  text-align: center;
-  margin: 4px 0;
-}
-#result-close {
-  margin-top: 20px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  color: #ccc;
-  padding: 12px 32px;
-  border-radius: 12px;
-  font-size: 14px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-#result-save {
-  margin-top: 16px;
-  background: #32cd32;
-  color: #0a0a1a;
-  border: none;
-  padding: 12px 32px;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  box-shadow: 0 2px 12px rgba(50,205,50,0.3);
-}
-#result-save:active { transform: scale(0.97); }
-#result-new {
-  margin-top: 10px;
-  background: #64c8ff;
-  color: #0a0a1a;
-  border: none;
-  padding: 12px 32px;
-  border-radius: 12px;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 600;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+#start-btn:active { background: #4ab0e8; }
+#loading-text {
+  color: #888;
+  font-size: 14px;
+  margin-top: 16px;
+  display: none;
+}
 
-/* ── Guide ── */
+/* 가이드 오버레이 */
 #guide {
   position: absolute;
-  top: 45%; left: 50%;
+  top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   text-align: center;
   z-index: 10;
   opacity: 0;
-  transition: opacity 0.6s;
+  transition: opacity 0.5s;
   pointer-events: none;
 }
 #guide.show { opacity: 1; }
 #guide p {
-  color: rgba(255,255,255,0.65);
-  font-size: 14px;
-  line-height: 1.6;
-  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  color: rgba(255,255,255,0.7);
+  font-size: 15px;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+
+/* WHO-ICOPE 속도 게이지 */
+#speed-gauge {
+  height: 6px;
+  border-radius: 3px;
+  margin: 6px 0;
+  position: relative;
+  background: linear-gradient(to right, #ff3333 0%, #ff3333 30%, #ff8800 30%, #ff8800 40%, #ffcc00 40%, #ffcc00 50%, #32cd32 50%, #32cd32 100%);
+  overflow: visible;
+}
+#speed-marker {
+  position: absolute;
+  top: -3px;
+  width: 4px; height: 12px;
+  background: #fff;
+  border-radius: 2px;
+  transition: left 0.2s;
+}
+
+/* 분석 종료 버튼 */
+#stop-btn {
+  position: absolute;
+  top: 50px; right: 16px;
+  background: rgba(255,50,50,0.85);
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 15;
+  display: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#stop-btn:active { background: rgba(200,30,30,0.9); }
+
+/* 결과 화면 */
+#result-screen {
+  position: absolute;
+  inset: 0;
+  background: #0a0a1a;
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 16px 40px;
+}
+#result-screen.active {
+  display: flex;
+}
+#result-screen h2 {
+  font-size: 22px;
+  color: #64c8ff;
+  margin-bottom: 12px;
+}
+#result-canvas {
+  max-width: 100%;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  background: #111;
+}
+#result-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+#result-buttons button {
+  padding: 12px 28px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#save-img-btn {
+  background: #64c8ff;
+  color: #0a0a1a;
+}
+#restart-btn {
+  background: rgba(255,255,255,0.15);
+  color: #e0e0f0;
 }
 </style>
 </head>
 <body>
 
-<!-- ====== Start Screen ====== -->
+<!-- 시작 화면 -->
 <div id="start-screen">
-  <div class="logo-text">Dignif-Eye</div>
-  <div class="logo-sub">Real-time Skeleton Gait Analysis</div>
-  <div class="camera-select">
-    <div class="cam-option selected" data-facing="environment">Rear Cam</div>
-    <div class="cam-option" data-facing="user">Front Cam</div>
-  </div>
-  <div class="height-input-area">
-    <label for="height-input">Height</label>
-    <input type="number" id="height-input" value="170" min="100" max="220" step="1">
-    <span class="height-unit">cm</span>
-  </div>
-  <button id="start-btn">Start Camera</button>
-  <div id="loading-text">Loading MoveNet model...</div>
+  <h1>Dignif-Eye</h1>
+  <p>실시간 스켈레톤 보행 분석</p>
+  <button id="start-btn">카메라 시작</button>
+  <div id="loading-text">MoveNet Lightning 로딩 중...</div>
 </div>
 
-<!-- ====== Main Screen ====== -->
+<!-- 메인 화면 -->
 <div id="container">
   <div id="status-bar"></div>
-  <video id="video" playsinline autoplay muted></video>
-  <canvas id="canvas"></canvas>
+  <div id="video-canvas-wrap">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="canvas"></canvas>
+  </div>
 
   <div id="header">
     <h1>Dignif-Eye</h1>
     <span id="fps-badge">-- FPS</span>
   </div>
 
-  <!-- State indicator -->
-  <div id="analysis-state">
-    <div id="state-dot"></div>
-    <span id="state-text">Ready</span>
-  </div>
+  <div id="zoom-indicator">1.0x</div>
 
-  <!-- Controls -->
-  <div id="controls">
-    <button class="ctrl-btn" id="btn-privacy">Skeleton</button>
-    <button class="ctrl-btn" id="btn-camera-switch">Switch Cam</button>
-  </div>
-
-  <!-- Timer -->
-  <div id="timer">00:00</div>
-
-  <!-- Guide -->
   <div id="guide">
-    <p>Stand 2-3m away from the camera<br>Walk naturally for analysis</p>
+    <p>뒤로 물러서서 자연스럽게 걸어주세요</p>
   </div>
 
-  <!-- Analysis Panel -->
-  <div id="panel" class="hidden">
+  <button id="stop-btn">분석 종료</button>
+
+  <div id="panel">
     <div id="speed-display">
       <span id="speed-value">--</span><span id="speed-unit">m/s</span>
-      <div id="speed-label">Waiting for analysis</div>
+      <div id="speed-label">대기 중...</div>
     </div>
     <div id="speed-gauge"><div id="speed-marker" style="left:0%"></div></div>
 
-    <div class="section-title">Spatiotemporal</div>
-    <div class="metrics-grid">
-      <div class="metric-row"><span class="metric-label">Cadence</span><span class="metric-value" id="m-cadence">--</span></div>
-      <div class="metric-row"><span class="metric-label">Stride Time</span><span class="metric-value" id="m-stride-time">--</span></div>
-      <div class="metric-row"><span class="metric-label">Step Length</span><span class="metric-value" id="m-step-length">--</span></div>
-      <div class="metric-row"><span class="metric-label">Symmetry</span><span class="metric-value" id="m-symmetry">--</span></div>
-    </div>
+    <div class="section-title">시공간 지표</div>
+    <div class="metric-row"><span class="metric-label">분당 걸음수</span><span class="metric-value" id="m-cadence">--</span></div>
+    <div class="metric-row"><span class="metric-label">보폭 시간</span><span class="metric-value" id="m-stride-time">--</span></div>
+    <div class="metric-row"><span class="metric-label">보폭 길이</span><span class="metric-value" id="m-step-length">--</span></div>
+    <div class="metric-row"><span class="metric-label">대칭성</span><span class="metric-value" id="m-symmetry">--</span></div>
+    <div class="metric-row"><span class="metric-label">변동성</span><span class="metric-value" id="m-variability">--</span></div>
+    <div class="metric-row"><span class="metric-label">측정 시간</span><span class="metric-value" id="m-duration">--</span></div>
 
-    <div class="section-title">Kinematics</div>
-    <div class="metrics-grid">
-      <div class="metric-row"><span class="metric-label">Trunk Lean</span><span class="metric-value" id="m-trunk">--</span></div>
-      <div class="metric-row"><span class="metric-label">Knee L/R</span><span class="metric-value" id="m-knee">--</span></div>
-      <div class="metric-row"><span class="metric-label">Hip L/R</span><span class="metric-value" id="m-hip">--</span></div>
-      <div class="metric-row"><span class="metric-label">Variability</span><span class="metric-value" id="m-var">--</span></div>
-    </div>
+    <div class="section-title">운동학 지표</div>
+    <div class="metric-row"><span class="metric-label">체간 기울기</span><span class="metric-value" id="m-trunk">--</span></div>
+    <div class="metric-row"><span class="metric-label">무릎 각도 (좌/우)</span><span class="metric-value" id="m-knee">--</span></div>
+    <div class="metric-row"><span class="metric-label">고관절 각도 (좌/우)</span><span class="metric-value" id="m-hip">--</span></div>
 
-    <div class="section-title">Gait Phase</div>
-    <div class="metrics-grid">
-      <div class="metric-row"><span class="metric-label">Stance</span><span class="metric-value" id="m-stance">--</span></div>
-      <div class="metric-row"><span class="metric-label">Swing</span><span class="metric-value" id="m-swing">--</span></div>
-      <div class="metric-row"><span class="metric-label">Dbl Support</span><span class="metric-value" id="m-double">--</span></div>
-      <div class="metric-row"><span class="metric-label">Status</span><span class="metric-value" id="m-status">--</span></div>
-    </div>
-  </div>
-
-  <!-- Action Button -->
-  <div id="action-area">
-    <button id="action-btn">Start Analysis</button>
+    <div class="section-title">보행 주기</div>
+    <div class="metric-row"><span class="metric-label">입각기</span><span class="metric-value" id="m-stance">--</span></div>
+    <div class="metric-row"><span class="metric-label">유각기</span><span class="metric-value" id="m-swing">--</span></div>
+    <div class="metric-row"><span class="metric-label">양하지 지지</span><span class="metric-value" id="m-double">--</span></div>
   </div>
 </div>
 
-<!-- ====== Result Overlay ====== -->
-<div id="result-overlay">
-  <h2>Analysis Complete</h2>
-  <div class="result-card">
-    <div class="rc-title">Walking Speed (WHO-ICOPE)</div>
-    <div class="rc-big" id="r-speed">--</div>
-    <div class="rc-row"><span class="rc-label">Rating</span><span class="rc-value" id="r-rating">--</span></div>
+<!-- 결과 화면 -->
+<div id="result-screen">
+  <h2>Dignif-Eye 분석 결과</h2>
+  <canvas id="result-canvas"></canvas>
+  <div id="result-buttons">
+    <button id="save-img-btn">이미지 저장</button>
+    <button id="restart-btn">다시 시작</button>
   </div>
-  <div class="result-card">
-    <div class="rc-title">Spatiotemporal Parameters</div>
-    <div class="rc-row"><span class="rc-label">Cadence</span><span class="rc-value" id="r-cadence">--</span></div>
-    <div class="rc-row"><span class="rc-label">Stride Time</span><span class="rc-value" id="r-stride">--</span></div>
-    <div class="rc-row"><span class="rc-label">Step Length</span><span class="rc-value" id="r-step">--</span></div>
-    <div class="rc-row"><span class="rc-label">Symmetry</span><span class="rc-value" id="r-sym">--</span></div>
-    <div class="rc-row"><span class="rc-label">Variability</span><span class="rc-value" id="r-var">--</span></div>
-  </div>
-  <div class="result-card">
-    <div class="rc-title">Kinematics / Phase</div>
-    <div class="rc-row"><span class="rc-label">Trunk Lean</span><span class="rc-value" id="r-trunk">--</span></div>
-    <div class="rc-row"><span class="rc-label">Knee (L/R)</span><span class="rc-value" id="r-knee">--</span></div>
-    <div class="rc-row"><span class="rc-label">Stance Phase</span><span class="rc-value" id="r-stance">--</span></div>
-    <div class="rc-row"><span class="rc-label">Duration</span><span class="rc-value" id="r-duration">--</span></div>
-  </div>
-  <button id="result-save">Save Result Image</button>
-  <button id="result-new">New Analysis</button>
-  <button id="result-close">Close</button>
 </div>
-<!-- Hidden canvas for image export -->
-<canvas id="export-canvas" style="display:none"></canvas>
 
-<!-- ====== TensorFlow.js + MoveNet ====== -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"
-  integrity="sha384-R4iglwC8w7UAyfRq7VUmXEPjrvYnoXIqhsbTUN07o6o8yKYeiTY0/Z6DzbsKgWZ3"
-  crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"
-  integrity="sha384-pjg3ZYfXdbqsHl42YTyNHeHMzvrwQUvEuQ7tTn6+tDmoUkSD3ItK1sBa73y1l0H3"
-  crossorigin="anonymous"></script>
+<!-- TensorFlow.js + MoveNet -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
 
 <script>
-// ═══════════════════════════════════════════════════════════
-//  COCO 17 Keypoints
-// ═══════════════════════════════════════════════════════════
-const NOSE=0,L_EYE=1,R_EYE=2,L_EAR=3,R_EAR=4;
-const L_SHOULDER=5,R_SHOULDER=6,L_ELBOW=7,R_ELBOW=8;
-const L_WRIST=9,R_WRIST=10,L_HIP=11,R_HIP=12;
-const L_KNEE=13,R_KNEE=14,L_ANKLE=15,R_ANKLE=16;
+// ── COCO 17 Keypoint Indices ──
+const NOSE=0, L_EYE=1, R_EYE=2, L_EAR=3, R_EAR=4;
+const L_SHOULDER=5, R_SHOULDER=6, L_ELBOW=7, R_ELBOW=8;
+const L_WRIST=9, R_WRIST=10, L_HIP=11, R_HIP=12;
+const L_KNEE=13, R_KNEE=14, L_ANKLE=15, R_ANKLE=16;
 
-const SKELETON=[
+const SKELETON = [
   [NOSE,L_EYE],[NOSE,R_EYE],[L_EYE,L_EAR],[R_EYE,R_EAR],
   [L_SHOULDER,R_SHOULDER],
   [L_SHOULDER,L_ELBOW],[L_ELBOW,L_WRIST],
@@ -636,654 +370,772 @@ const SKELETON=[
   [R_HIP,R_KNEE],[R_KNEE,R_ANKLE],
 ];
 
-function jColor(i){
-  if(i<=4) return [200,200,200];
-  if(i<=6) return [50,180,255];
-  if(i<=10)return [100,220,255];
-  if(i<=12)return [50,255,50];
-  if(i<=14)return [255,200,50];
+function getJointColor(idx) {
+  if (idx <= 4)  return [200,200,200];
+  if (idx <= 6)  return [50,180,255];
+  if (idx <= 10) return [100,220,255];
+  if (idx <= 12) return [50,255,50];
+  if (idx <= 14) return [255,200,50];
   return [255,100,50];
 }
 
-const SPEED_SEVERE=0.6,SPEED_THRESH=0.8,SPEED_CAUTION=1.0;
-function speedInfo(s){
-  if(s<=0) return{label:'N/A',color:'#888'};
-  if(s<SPEED_SEVERE) return{label:'SEVERE',color:'#ff3333'};
-  if(s<SPEED_THRESH) return{label:'WARNING',color:'#ff6600'};
-  if(s<SPEED_CAUTION)return{label:'CAUTION',color:'#ffcc00'};
-  return{label:'NORMAL',color:'#32cd32'};
+// ── WHO-ICOPE 기준 ──
+const SPEED_SEVERE = 0.6, SPEED_THRESHOLD = 0.8, SPEED_CAUTION = 1.0;
+function getSpeedInfo(s) {
+  if (s <= 0)            return { label: '대기 중...', color: '#888' };
+  if (s < SPEED_SEVERE)  return { label: '심각',       color: '#ff3333' };
+  if (s < SPEED_THRESHOLD) return { label: '경고',     color: '#ff6600' };
+  if (s < SPEED_CAUTION) return { label: '주의',       color: '#ffcc00' };
+  return                        { label: '정상',       color: '#32cd32' };
 }
 
-// ═══════════════════════════════════════════════════════════
-//  Gait Analyzer (JS port of gait_analyzer.py)
-// ═══════════════════════════════════════════════════════════
-class GaitAnalyzer{
-  constructor(userHeightM=1.70){
-    this.BS=180; this.fps=30;
-    this.userHeightM=userHeightM; // user-provided height for calibration
-    this.hipH=[]; this.lAY=[]; this.rAY=[];
-    this.lAX=[]; this.rAX=[]; this.sCX=[];
-    this.kpBuf=[]; this.stHist=[]; this.hSamples=[];
-    this.ppm=null; this.fc=0;
+// ── Gait Analyzer (JS port) ──
+class GaitAnalyzer {
+  constructor() {
+    this.bufferSize = 180;
+    this.fps = 30;
+    this.hipHistory = [];
+    this.lAnkleY = [];
+    this.rAnkleY = [];
+    this.lAnkleX = [];
+    this.rAnkleX = [];
+    this.shoulderCX = [];
+    this.kpBuffer = [];
+    this.strideTimesHist = [];
+    this.frameCount = 0;
+    this.pxPerMeter = null;
+    this.heightSamples = [];
   }
-  update(kps){
-    this.fc++;
-    if(!kps||kps.length<17) return null;
-    const lH=kps[L_HIP],rH=kps[R_HIP];
-    const hx=(lH.x+rH.x)/2, hy=(lH.y+rH.y)/2;
-    this._p(this.hipH,[hx,hy]);
-    this._p(this.lAY,kps[L_ANKLE].y); this._p(this.rAY,kps[R_ANKLE].y);
-    this._p(this.lAX,kps[L_ANKLE].x); this._p(this.rAX,kps[R_ANKLE].x);
-    this._p(this.sCX,(kps[L_SHOULDER].x+kps[R_SHOULDER].x)/2);
-    this._p(this.kpBuf,kps);
-    this._calH(kps);
-    if(this.lAY.length<60) return null;
+
+  update(kps) {
+    this.frameCount++;
+    if (!kps || kps.length < 17) return null;
+
+    const lHip = kps[L_HIP], rHip = kps[R_HIP];
+    const hipCx = (lHip.x + rHip.x) / 2;
+    const hipCy = (lHip.y + rHip.y) / 2;
+
+    this._push(this.hipHistory, [hipCx, hipCy]);
+    this._push(this.lAnkleY, kps[L_ANKLE].y);
+    this._push(this.rAnkleY, kps[R_ANKLE].y);
+    this._push(this.lAnkleX, kps[L_ANKLE].x);
+    this._push(this.rAnkleX, kps[R_ANKLE].x);
+    this._push(this.shoulderCX, (kps[L_SHOULDER].x + kps[R_SHOULDER].x) / 2);
+    this._push(this.kpBuffer, kps);
+
+    this._calibrateHeight(kps);
+
+    if (this.lAnkleY.length < 60) return null;
     return this._compute(kps);
   }
-  _p(a,v){a.push(v);if(a.length>this.BS)a.shift();}
-  _calH(kps){
-    const n=kps[NOSE],la=kps[L_ANKLE],ra=kps[R_ANKLE];
-    if(n.score>0.3&&la.score>0.3&&ra.score>0.3){
-      const h=Math.max(la.y,ra.y)-n.y;
-      if(h>50){this.hSamples.push(h);if(this.hSamples.length>60)this.hSamples.shift();
-        this.ppm=this._med(this.hSamples)/this.userHeightM;}
+
+  _push(arr, val) {
+    arr.push(val);
+    if (arr.length > this.bufferSize) arr.shift();
+  }
+
+  _calibrateHeight(kps) {
+    const nose = kps[NOSE], lAnkle = kps[L_ANKLE], rAnkle = kps[R_ANKLE];
+    if (nose.score > 0.3 && lAnkle.score > 0.3 && rAnkle.score > 0.3) {
+      const ankleY = Math.max(lAnkle.y, rAnkle.y);
+      const h = ankleY - nose.y;
+      if (h > 50) {
+        this.heightSamples.push(h);
+        if (this.heightSamples.length > 60) this.heightSamples.shift();
+        const medH = this._median(this.heightSamples);
+        this.pxPerMeter = medH / 1.65;
+      }
     }
   }
-  _compute(kps){
-    const m={};
-    // Speed
-    let spf=0;
-    if(this.hipH.length>10){
-      const d=[];
-      for(let i=1;i<this.hipH.length;i++){
-        const dx=this.hipH[i][0]-this.hipH[i-1][0],dy=this.hipH[i][1]-this.hipH[i-1][1];
-        d.push(Math.sqrt(dx*dx+dy*dy));
-      }
-      const s=[...d].sort((a,b)=>a-b);
-      const q1=Math.floor(s.length*0.25),q3=Math.floor(s.length*0.75);
-      const st=s.slice(q1,q3);
-      spf=st.length>0?st.reduce((a,b)=>a+b,0)/st.length:0;
-    }
-    m.speedPxF=spf;
-    m.speedMps=this.ppm&&this.ppm>0?(spf*this.fps/this.ppm):0;
 
-    // Peaks
-    const lP=this._peaks(this.lAY), rP=this._peaks(this.rAY);
-    const lS=this._iv(lP), rS=this._iv(rP);
-    const aS=[...lS,...rS];
-    m.strideTime=0; m.cadence=0;
-    if(aS.length>0){
-      const med=this._med(aS);
-      const v=aS.filter(s=>s>med*0.5&&s<med*1.5);
-      if(v.length>0){
-        const avg=v.reduce((a,b)=>a+b,0)/v.length;
-        m.strideTime=avg/this.fps;
-        if(m.strideTime>0){const c=120/m.strideTime;if(c>=50&&c<=160)m.cadence=c;}
-        v.forEach(x=>{this.stHist.push(x/this.fps);if(this.stHist.length>30)this.stHist.shift();});
+  _compute(kps) {
+    const m = {};
+
+    // 1) Gait speed
+    let speedPxF = 0;
+    if (this.hipHistory.length > 10) {
+      const disps = [];
+      for (let i = 1; i < this.hipHistory.length; i++) {
+        const dx = this.hipHistory[i][0] - this.hipHistory[i-1][0];
+        const dy = this.hipHistory[i][1] - this.hipHistory[i-1][1];
+        disps.push(Math.sqrt(dx*dx + dy*dy));
+      }
+      const sorted = [...disps].sort((a,b) => a-b);
+      const q1 = Math.floor(sorted.length * 0.25);
+      const q3 = Math.floor(sorted.length * 0.75);
+      const steady = sorted.slice(q1, q3);
+      speedPxF = steady.length > 0 ? steady.reduce((a,b)=>a+b,0)/steady.length : 0;
+    }
+    m.gaitSpeedPxF = speedPxF;
+    m.gaitSpeedMps = this.pxPerMeter && this.pxPerMeter > 0
+      ? (speedPxF * this.fps / this.pxPerMeter) : 0;
+
+    // 2) Stride detection
+    const lPeaks = this._findPeaks(this.lAnkleY);
+    const rPeaks = this._findPeaks(this.rAnkleY);
+
+    const lStrides = this._intervals(lPeaks);
+    const rStrides = this._intervals(rPeaks);
+    const allStrides = [...lStrides, ...rStrides];
+    m.strideTime = 0;
+    m.cadence = 0;
+    if (allStrides.length > 0) {
+      const med = this._median(allStrides);
+      const valid = allStrides.filter(s => s > med*0.5 && s < med*1.5);
+      if (valid.length > 0) {
+        const avg = valid.reduce((a,b)=>a+b,0) / valid.length;
+        m.strideTime = avg / this.fps;
+        if (m.strideTime > 0) {
+          const cad = 120 / m.strideTime;
+          if (cad >= 50 && cad <= 160) m.cadence = cad;
+        }
+        valid.forEach(v => {
+          this.strideTimesHist.push(v / this.fps);
+          if (this.strideTimesHist.length > 30) this.strideTimesHist.shift();
+        });
       }
     }
 
     // Step length
-    const ap=[...lP,...rP].sort((a,b)=>a-b);
-    m.stepLength=0;
-    if(ap.length>1&&this.kpBuf.length>0){
-      const ls=new Set(lP); const sv=[];
-      for(let i=0;i<ap.length-1;i++){
-        const f1=ap[i],f2=ap[i+1];
-        const j1=ls.has(f1)?L_ANKLE:R_ANKLE,j2=ls.has(f2)?L_ANKLE:R_ANKLE;
-        const b1=Math.min(f1,this.kpBuf.length-1),b2=Math.min(f2,this.kpBuf.length-1);
-        if(b1>=0&&b2>=0&&this.kpBuf[b1]&&this.kpBuf[b2])
-          sv.push(Math.abs(this.kpBuf[b2][j2].x-this.kpBuf[b1][j1].x));
+    const allPeaksSorted = [...lPeaks, ...rPeaks].sort((a,b) => a-b);
+    m.stepLength = 0;
+    if (allPeaksSorted.length > 1 && this.kpBuffer.length > 0) {
+      const lSet = new Set(lPeaks);
+      const stepVals = [];
+      for (let i = 0; i < allPeaksSorted.length - 1; i++) {
+        const f1 = allPeaksSorted[i], f2 = allPeaksSorted[i+1];
+        const j1 = lSet.has(f1) ? L_ANKLE : R_ANKLE;
+        const j2 = lSet.has(f2) ? L_ANKLE : R_ANKLE;
+        const bi = Math.min(f1, this.kpBuffer.length - 1);
+        const bi2 = Math.min(f2, this.kpBuffer.length - 1);
+        if (bi >= 0 && bi2 >= 0 && this.kpBuffer[bi] && this.kpBuffer[bi2]) {
+          const dx = this.kpBuffer[bi2][j2].x - this.kpBuffer[bi][j1].x;
+          stepVals.push(Math.abs(dx));
+        }
       }
-      if(sv.length>0)m.stepLength=sv.reduce((a,b)=>a+b,0)/sv.length;
+      if (stepVals.length > 0) {
+        m.stepLength = stepVals.reduce((a,b)=>a+b,0) / stepVals.length;
+      }
     }
 
     // Symmetry
-    m.symmetry=0;
-    if(lS.length>0&&rS.length>0){
-      const lm=lS.reduce((a,b)=>a+b,0)/lS.length,rm=rS.reduce((a,b)=>a+b,0)/rS.length;
-      const dn=lm+rm; if(dn>0)m.symmetry=Math.min(2*Math.abs(rm-lm)/dn*100,50);
+    m.symmetry = 0;
+    if (lStrides.length > 0 && rStrides.length > 0) {
+      const lm = lStrides.reduce((a,b)=>a+b,0)/lStrides.length;
+      const rm = rStrides.reduce((a,b)=>a+b,0)/rStrides.length;
+      const den = lm + rm;
+      if (den > 0) m.symmetry = Math.min(2 * Math.abs(rm-lm)/den * 100, 50);
     }
 
-    // Variability
-    m.variability=0;
-    if(this.stHist.length>=3){
-      const a=this.stHist,mn=a.reduce((x,y)=>x+y,0)/a.length;
-      if(mn>0){const sd=Math.sqrt(a.reduce((x,y)=>x+(y-mn)*(y-mn),0)/a.length);m.variability=(sd/mn)*100;}
-    }
-
-    // Joint angles
-    m.hipL=this._ang(kps[L_SHOULDER],kps[L_HIP],kps[L_KNEE]);
-    m.hipR=this._ang(kps[R_SHOULDER],kps[R_HIP],kps[R_KNEE]);
-    m.kneeL=this._ang(kps[L_HIP],kps[L_KNEE],kps[L_ANKLE]);
-    m.kneeR=this._ang(kps[R_HIP],kps[R_KNEE],kps[R_ANKLE]);
-
-    // Trunk lean
-    const sm={x:(kps[L_SHOULDER].x+kps[R_SHOULDER].x)/2,y:(kps[L_SHOULDER].y+kps[R_SHOULDER].y)/2};
-    const hm={x:(kps[L_HIP].x+kps[R_HIP].x)/2,y:(kps[L_HIP].y+kps[R_HIP].y)/2};
-    const tx=sm.x-hm.x,ty=sm.y-hm.y,tl=Math.sqrt(tx*tx+ty*ty)+1e-8;
-    m.trunkLean=Math.acos(Math.max(-1,Math.min(1,(ty*-1)/tl)))*180/Math.PI;
-
-    // Gait phases
-    const n=Math.min(this.lAY.length,this.rAY.length);
-    const lSl=this.lAY.slice(-n),rSl=this.rAY.slice(-n);
-    const lt=this._med(lSl),rt=this._med(rSl);
-    let stN=0,dbN=0;
-    for(let i=0;i<n;i++){const ls=lSl[i]>=lt,rs=rSl[i]>=rt;if(ls||rs)stN++;if(ls&&rs)dbN++;}
-    m.stancePct=(stN/n)*100; m.swingPct=100-m.stancePct; m.doublePct=(dbN/n)*100;
-
-    // Status
-    let w=0;
-    if(m.symmetry>10)w+=2;else if(m.symmetry>5)w++;
-    if(m.variability>8)w+=2;else if(m.variability>5)w++;
-    if(m.cadence>0&&(m.cadence<90||m.cadence>130))w++;
-    m.status=w>=3?'warning':w>=1?'caution':'normal';
-    return m;
-  }
-  _peaks(a){
-    if(a.length<10)return[];
-    const md=Math.floor(this.fps*0.35),rng=Math.max(...a)-Math.min(...a);
-    const pr=Math.max(8,rng*0.15),pk=[];
-    for(let i=1;i<a.length-1;i++){
-      if(a[i]>a[i-1]&&a[i]>a[i+1]){
-        const lm=Math.min(...a.slice(Math.max(0,i-md),i));
-        const rm=Math.min(...a.slice(i+1,Math.min(a.length,i+md+1)));
-        if(a[i]-Math.max(lm,rm)>=pr)pk.push(i);
+    // Variability (CV%)
+    m.variability = 0;
+    if (this.strideTimesHist.length >= 3) {
+      const arr = this.strideTimesHist;
+      const mean = arr.reduce((a,b)=>a+b,0)/arr.length;
+      if (mean > 0) {
+        const std = Math.sqrt(arr.reduce((a,b)=>a+(b-mean)*(b-mean),0)/arr.length);
+        m.variability = (std / mean) * 100;
       }
     }
-    const f=[];for(const p of pk){if(!f.length||p-f[f.length-1]>=md)f.push(p);}return f;
-  }
-  _iv(p){const r=[];for(let i=1;i<p.length;i++)r.push(p[i]-p[i-1]);return r;}
-  _ang(a,b,c){
-    if(a.score<0.3||b.score<0.3||c.score<0.3)return 0;
-    const v1x=a.x-b.x,v1y=a.y-b.y,v2x=c.x-b.x,v2y=c.y-b.y;
-    const d=v1x*v2x+v1y*v2y,l1=Math.sqrt(v1x*v1x+v1y*v1y)+1e-8,l2=Math.sqrt(v2x*v2x+v2y*v2y)+1e-8;
-    return Math.acos(Math.max(-1,Math.min(1,d/(l1*l2))))*180/Math.PI;
-  }
-  _med(a){if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y),m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2;}
-  reset(){
-    this.hipH=[];this.lAY=[];this.rAY=[];this.lAX=[];this.rAX=[];
-    this.sCX=[];this.kpBuf=[];this.stHist=[];this.hSamples=[];
-    this.ppm=null;this.fc=0;
-  }
-}
 
-// ═══════════════════════════════════════════════════════════
-//  App State & DOM
-// ═══════════════════════════════════════════════════════════
-const video=document.getElementById('video');
-const canvas=document.getElementById('canvas');
-const ctx=canvas.getContext('2d');
+    // 3) Joint angles
+    m.hipAngleL = this._angle3(kps[L_SHOULDER], kps[L_HIP], kps[L_KNEE]);
+    m.hipAngleR = this._angle3(kps[R_SHOULDER], kps[R_HIP], kps[R_KNEE]);
+    m.kneeAngleL = this._angle3(kps[L_HIP], kps[L_KNEE], kps[L_ANKLE]);
+    m.kneeAngleR = this._angle3(kps[R_HIP], kps[R_KNEE], kps[R_ANKLE]);
 
-let detector=null, analyzer=null;
-let lastTime=performance.now(), fpsSmooth=0;
-let trailPts=[];
+    // Trunk lean
+    const sMid = {x:(kps[L_SHOULDER].x+kps[R_SHOULDER].x)/2, y:(kps[L_SHOULDER].y+kps[R_SHOULDER].y)/2};
+    const hMid = {x:(kps[L_HIP].x+kps[R_HIP].x)/2, y:(kps[L_HIP].y+kps[R_HIP].y)/2};
+    const tx = sMid.x - hMid.x, ty = sMid.y - hMid.y;
+    const tLen = Math.sqrt(tx*tx + ty*ty) + 1e-8;
+    const cosA = (tx*0 + ty*(-1)) / tLen;
+    m.trunkLean = Math.acos(Math.max(-1, Math.min(1, cosA))) * 180 / Math.PI;
 
-function getUserHeightM(){
-  const el=document.getElementById('height-input');
-  if(!el) return 1.70;
-  const v=parseFloat(el.value);
-  if(isNaN(v)||v<100||v>220){
-    el.style.borderColor='#ff6666';
-    return 1.70;
-  }
-  el.style.borderColor='';
-  return v/100;
-}
-
-// App state: 'idle' | 'recording' | 'done'
-let appState='idle';
-let recordStart=0, recordDuration=0;
-let lastMetrics=null, finalMetrics=null;
-let privacyMode=false;
-let selectedFacing='environment';
-let lastSkeletonSnapshot=null; // canvas ImageData captured at stop
-
-// ── Camera selection ──
-document.querySelectorAll('.cam-option').forEach(el=>{
-  el.addEventListener('click',()=>{
-    document.querySelectorAll('.cam-option').forEach(e=>e.classList.remove('selected'));
-    el.classList.add('selected');
-    selectedFacing=el.dataset.facing;
-  });
-});
-
-// ── Start button ──
-document.getElementById('start-btn').addEventListener('click', startApp);
-
-async function startApp(){
-  const btn=document.getElementById('start-btn');
-  btn.disabled=true; btn.textContent='Loading...';
-  document.getElementById('loading-text').style.display='block';
-
-  try{
-    const stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:selectedFacing,width:{ideal:1280},height:{ideal:720}},audio:false
-    });
-    video.srcObject=stream; await video.play();
-    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-
-    document.getElementById('loading-text').textContent='Loading MoveNet Lightning...';
-    detector=await poseDetection.createDetector(
-      poseDetection.SupportedModels.MoveNet,
-      {modelType:poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING}
-    );
-
-    // Initialize analyzer AFTER model loads successfully
-    analyzer=new GaitAnalyzer(getUserHeightM());
-    const settings=stream.getVideoTracks()[0].getSettings();
-    if(settings.frameRate) analyzer.fps=settings.frameRate;
-
-    // Lock height input after initialization (cannot change mid-session)
-    document.getElementById('height-input').disabled=true;
-    document.getElementById('start-screen').classList.add('hidden');
-    document.getElementById('guide').classList.add('show');
-    setTimeout(()=>document.getElementById('guide').classList.remove('show'),4000);
-    detect();
-  }catch(e){
-    alert('Error: '+e.message);
-    btn.disabled=false; btn.textContent='Retry';
-    document.getElementById('loading-text').style.display='none';
-  }
-}
-
-// ── Main loop ──
-async function detect(){
-  if(!detector)return;
-  const poses=await detector.estimatePoses(video);
-  const now=performance.now(), dt=now-lastTime;
-  lastTime=now; fpsSmooth=fpsSmooth*0.9+(1000/dt)*0.1;
-
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // Security: canvas NEVER contains raw video pixels.
-  // Video is rendered by the <video> element via CSS only.
-  // In privacy mode, canvas covers video with opaque black background.
-  if(privacyMode){
-    ctx.fillStyle='#0a0a1a';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-  }
-
-  let metrics=null;
-  if(poses.length>0&&poses[0].keypoints){
-    const kps=poses[0].keypoints;
-    drawSkeleton(kps);
-    if(analyzer){
-      if(appState==='recording') metrics=analyzer.update(kps);
-      else if(appState==='idle') metrics=analyzer.update(kps);
+    // 4) Gait phases
+    const n = Math.min(this.lAnkleY.length, this.rAnkleY.length);
+    const lSlice = this.lAnkleY.slice(-n);
+    const rSlice = this.rAnkleY.slice(-n);
+    const lThresh = this._median(lSlice);
+    const rThresh = this._median(rSlice);
+    let stanceN = 0, doubleN = 0;
+    for (let i = 0; i < n; i++) {
+      const ls = lSlice[i] >= lThresh, rs = rSlice[i] >= rThresh;
+      if (ls || rs) stanceN++;
+      if (ls && rs) doubleN++;
     }
+    m.stancePct = (stanceN / n) * 100;
+    m.swingPct = 100 - m.stancePct;
+    m.doubleSupportPct = (doubleN / n) * 100;
+
+    // Status
+    let warnCount = 0;
+    if (m.symmetry > 10) warnCount += 2;
+    else if (m.symmetry > 5) warnCount += 1;
+    if (m.variability > 8) warnCount += 2;
+    else if (m.variability > 5) warnCount += 1;
+    if (m.cadence > 0 && (m.cadence < 90 || m.cadence > 130)) warnCount += 1;
+    m.status = warnCount >= 3 ? 'warning' : warnCount >= 1 ? 'caution' : 'normal';
+
+    return m;
   }
 
-  if(metrics) lastMetrics=metrics;
-  updateUI(lastMetrics);
-
-  // Timer
-  if(appState==='recording'){
-    const elapsed=(now-recordStart)/1000;
-    const mm=String(Math.floor(elapsed/60)).padStart(2,'0');
-    const ss=String(Math.floor(elapsed%60)).padStart(2,'0');
-    document.getElementById('timer').textContent=mm+':'+ss;
-  }
-
-  requestAnimationFrame(detect);
-}
-
-// ── Skeleton drawing ──
-function drawSkeleton(kps){
-  for(const[i,j]of SKELETON){
-    const p1=kps[i],p2=kps[j];
-    if(p1.score>0.3&&p2.score>0.3){
-      const c=jColor(Math.max(i,j));
-      ctx.strokeStyle=`rgb(${c[0]},${c[1]},${c[2]})`;
-      ctx.lineWidth=(i>=L_HIP&&j>=L_HIP)?4:3;
-      ctx.lineCap='round';
-      ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+  _findPeaks(arr) {
+    if (arr.length < 10) return [];
+    const minDist = Math.floor(this.fps * 0.35);
+    const range = Math.max(...arr) - Math.min(...arr);
+    const prom = Math.max(8, range * 0.15);
+    const peaks = [];
+    for (let i = 1; i < arr.length - 1; i++) {
+      if (arr[i] > arr[i-1] && arr[i] > arr[i+1]) {
+        const leftMin = Math.min(...arr.slice(Math.max(0, i-minDist), i));
+        const rightMin = Math.min(...arr.slice(i+1, Math.min(arr.length, i+minDist+1)));
+        const p = arr[i] - Math.max(leftMin, rightMin);
+        if (p >= prom) peaks.push(i);
+      }
     }
-  }
-  for(let i=0;i<17;i++){
-    const p=kps[i];
-    if(p.score>0.3){
-      const c=jColor(i),r=i>=L_HIP?7:5;
-      ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;
-      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
+    const filtered = [];
+    for (const p of peaks) {
+      if (filtered.length === 0 || p - filtered[filtered.length-1] >= minDist) {
+        filtered.push(p);
+      }
     }
+    return filtered;
   }
-  // Trail
-  const la=kps[L_ANKLE];
-  if(la.score>0.3){trailPts.push({x:la.x,y:la.y});if(trailPts.length>50)trailPts.shift();}
-  for(let i=1;i<trailPts.length;i++){
-    const a=i/trailPts.length;
-    ctx.strokeStyle=`rgba(${Math.floor(50+200*a)},${Math.floor(100*(1-a))},${Math.floor(255*a)},${a})`;
-    ctx.lineWidth=Math.max(1,Math.floor(3*a));
-    ctx.beginPath(); ctx.moveTo(trailPts[i-1].x,trailPts[i-1].y); ctx.lineTo(trailPts[i].x,trailPts[i].y); ctx.stroke();
+
+  _intervals(peaks) {
+    const r = [];
+    for (let i = 1; i < peaks.length; i++) r.push(peaks[i] - peaks[i-1]);
+    return r;
+  }
+
+  _angle3(p1, p2, p3) {
+    if (p1.score < 0.3 || p2.score < 0.3 || p3.score < 0.3) return 0;
+    const v1x = p1.x-p2.x, v1y = p1.y-p2.y;
+    const v2x = p3.x-p2.x, v2y = p3.y-p2.y;
+    const dot = v1x*v2x + v1y*v2y;
+    const l1 = Math.sqrt(v1x*v1x+v1y*v1y)+1e-8;
+    const l2 = Math.sqrt(v2x*v2x+v2y*v2y)+1e-8;
+    const cos = Math.max(-1, Math.min(1, dot/(l1*l2)));
+    return Math.acos(cos) * 180 / Math.PI;
+  }
+
+  _median(arr) {
+    if (arr.length === 0) return 0;
+    const s = [...arr].sort((a,b) => a-b);
+    const m = Math.floor(s.length/2);
+    return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+  }
+
+  reset() {
+    this.hipHistory = [];
+    this.lAnkleY = [];
+    this.rAnkleY = [];
+    this.lAnkleX = [];
+    this.rAnkleX = [];
+    this.shoulderCX = [];
+    this.kpBuffer = [];
+    this.strideTimesHist = [];
+    this.heightSamples = [];
+    this.pxPerMeter = null;
+    this.frameCount = 0;
   }
 }
 
-// ── UI update ──
-function updateUI(m){
-  document.getElementById('fps-badge').textContent=Math.round(fpsSmooth)+' FPS';
-  if(!m){return;}
-  const si=speedInfo(m.speedMps);
-  document.getElementById('speed-value').textContent=m.speedMps>0?m.speedMps.toFixed(2):'--';
-  document.getElementById('speed-value').style.color=si.color;
-  document.getElementById('speed-label').textContent='WHO-ICOPE: '+si.label;
-  document.getElementById('speed-label').style.color=si.color;
-  document.getElementById('speed-marker').style.left=Math.min(m.speedMps/2*100,100)+'%';
+// ── Main App ──
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const startScreen = document.getElementById('start-screen');
+const startBtn = document.getElementById('start-btn');
+const loadingText = document.getElementById('loading-text');
+const guide = document.getElementById('guide');
+const stopBtn = document.getElementById('stop-btn');
+const resultScreen = document.getElementById('result-screen');
+const resultCanvas = document.getElementById('result-canvas');
+const saveImgBtn = document.getElementById('save-img-btn');
+const restartBtn = document.getElementById('restart-btn');
+const zoomIndicator = document.getElementById('zoom-indicator');
+const videoCanvasWrap = document.getElementById('video-canvas-wrap');
 
-  const sc={normal:'#32cd32',caution:'#ffcc00',warning:'#ff3333'};
-  document.getElementById('status-bar').style.background=sc[m.status]||'#444';
+let detector = null;
+let analyzer = new GaitAnalyzer();
+let animId = null;
+let lastTime = performance.now();
+let fpsSmooth = 0;
+let trailPts = [];
+let currentStream = null;
+let analysisStartTime = null;
+let lastMetrics = null;
 
-  document.getElementById('m-cadence').textContent=m.cadence>0?m.cadence.toFixed(0)+' spm':'--';
-  document.getElementById('m-stride-time').textContent=m.strideTime>0?m.strideTime.toFixed(2)+' s':'--';
-  document.getElementById('m-step-length').textContent=m.stepLength>0?m.stepLength.toFixed(0)+' px':'--';
-  document.getElementById('m-symmetry').textContent=m.symmetry.toFixed(1)+' %';
-  document.getElementById('m-trunk').textContent=m.trunkLean.toFixed(1)+' deg';
-  document.getElementById('m-knee').textContent=m.kneeL.toFixed(0)+' / '+m.kneeR.toFixed(0);
-  document.getElementById('m-hip').textContent=m.hipL.toFixed(0)+' / '+m.hipR.toFixed(0);
-  document.getElementById('m-var').textContent=m.variability.toFixed(1)+' CV%';
-  document.getElementById('m-stance').textContent=m.stancePct.toFixed(1)+' %';
-  document.getElementById('m-swing').textContent=m.swingPct.toFixed(1)+' %';
-  document.getElementById('m-double').textContent=m.doublePct.toFixed(1)+' %';
-  document.getElementById('m-status').textContent=m.status.toUpperCase();
-  document.getElementById('m-status').style.color=sc[m.status]||'#dde';
+// Best frame tracking
+let bestFrameScore = 0;
+let bestFrameKeypoints = null;
+let bestFrameImageData = null;
+let lastBestCaptureTime = 0;
+
+// Ankle trail
+const MAX_TRAIL = 50;
+
+// ── Pinch Zoom State ──
+let currentZoom = 1.0;
+const MIN_ZOOM = 1.0;
+const MAX_ZOOM = 5.0;
+let nativeZoomSupported = false;
+let nativeZoomMin = 1;
+let nativeZoomMax = 1;
+let pinchStartDist = 0;
+let pinchStartZoom = 1.0;
+let zoomHideTimer = null;
+
+function showZoomLevel() {
+  zoomIndicator.textContent = currentZoom.toFixed(1) + 'x';
+  zoomIndicator.classList.add('show');
+  clearTimeout(zoomHideTimer);
+  zoomHideTimer = setTimeout(() => zoomIndicator.classList.remove('show'), 1200);
 }
 
-// ═══════════════════════════════════════════════════════════
-//  Controls
-// ═══════════════════════════════════════════════════════════
+function getTouchDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
-// ── Action button: Start / Stop Analysis ──
-document.getElementById('action-btn').addEventListener('click',()=>{
-  if(appState==='idle'){
-    // Start recording
-    appState='recording';
-    recordStart=performance.now();
-    if(analyzer) analyzer.reset();
-    trailPts=[]; lastMetrics=null;
-    document.getElementById('action-btn').textContent='Stop Analysis';
-    document.getElementById('action-btn').classList.add('recording');
-    document.getElementById('state-dot').className='recording';
-    document.getElementById('state-text').textContent='Recording...';
-    document.getElementById('timer').classList.add('show');
-    document.getElementById('panel').classList.remove('hidden');
-    document.getElementById('guide').classList.remove('show');
-  } else if(appState==='recording'){
-    // Stop and show results
-    appState='done';
-    recordDuration=(performance.now()-recordStart)/1000;
-    finalMetrics=lastMetrics;
-    // Capture skeleton snapshot (black bg + skeleton from current canvas)
-    captureSkeletonSnapshot();
-    document.getElementById('action-btn').textContent='New Analysis';
-    document.getElementById('action-btn').classList.remove('recording');
-    document.getElementById('action-btn').classList.add('done');
-    document.getElementById('state-dot').className='done';
-    document.getElementById('state-text').textContent='Complete';
-    document.getElementById('timer').classList.remove('show');
-    showResults();
+function applyZoom(zoom) {
+  currentZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+
+  if (nativeZoomSupported && currentStream) {
+    const track = currentStream.getVideoTracks()[0];
+    const nativeZoom = nativeZoomMin + (currentZoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM) * (nativeZoomMax - nativeZoomMin);
+    try {
+      track.applyConstraints({ advanced: [{ zoom: Math.min(nativeZoom, nativeZoomMax) }] });
+    } catch(e) {
+      videoCanvasWrap.style.transform = `scale(${currentZoom})`;
+    }
   } else {
-    // Reset for new
-    resetToIdle();
+    // CSS transform fallback
+    videoCanvasWrap.style.transform = `scale(${currentZoom})`;
+  }
+  showZoomLevel();
+}
+
+// Touch event handlers for pinch zoom
+document.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    pinchStartDist = getTouchDist(e.touches);
+    pinchStartZoom = currentZoom;
+  }
+}, { passive: false });
+
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const dist = getTouchDist(e.touches);
+    const scale = dist / pinchStartDist;
+    applyZoom(pinchStartZoom * scale);
+  }
+}, { passive: false });
+
+document.addEventListener('touchend', (e) => {
+  if (e.touches.length < 2) {
+    pinchStartDist = 0;
+  }
+}, { passive: true });
+
+// ── Orientation Change Handler ──
+let resizeDebounceTimer = null;
+function handleOrientationChange() {
+  clearTimeout(resizeDebounceTimer);
+  resizeDebounceTimer = setTimeout(() => {
+    const w = video.videoWidth, h = video.videoHeight;
+    if (w && h && (canvas.width !== w || canvas.height !== h)) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+  }, 400);
+}
+
+if (screen.orientation) {
+  screen.orientation.addEventListener('change', handleOrientationChange);
+} else {
+  window.addEventListener('orientationchange', handleOrientationChange);
+}
+window.addEventListener('resize', handleOrientationChange);
+
+// ── Camera Start ──
+startBtn.addEventListener('click', async () => {
+  startBtn.disabled = true;
+  startBtn.textContent = '로딩 중...';
+  loadingText.style.display = 'block';
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    currentStream = stream;
+    video.srcObject = stream;
+    await video.play();
+
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    if (settings.frameRate) analyzer.fps = settings.frameRate;
+
+    // Check native zoom support
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if (caps.zoom) {
+      nativeZoomSupported = true;
+      nativeZoomMin = caps.zoom.min || 1;
+      nativeZoomMax = caps.zoom.max || 1;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    // Load MoveNet
+    loadingText.textContent = 'MoveNet Lightning 로딩 중...';
+    const model = poseDetection.SupportedModels.MoveNet;
+    detector = await poseDetection.createDetector(model, {
+      modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+    });
+
+    startScreen.classList.add('hidden');
+    stopBtn.style.display = 'block';
+    guide.classList.add('show');
+    setTimeout(() => guide.classList.remove('show'), 4000);
+
+    analysisStartTime = performance.now();
+    bestFrameScore = 0;
+    bestFrameKeypoints = null;
+    bestFrameImageData = null;
+    lastBestCaptureTime = 0;
+
+    detect();
+  } catch(e) {
+    alert('카메라/모델 오류: ' + e.message);
+    startBtn.disabled = false;
+    startBtn.textContent = '재시도';
+    loadingText.style.display = 'none';
   }
 });
 
-function resetToIdle(){
-  appState='idle';
-  if(analyzer) analyzer.reset();
-  trailPts=[]; lastMetrics=null; finalMetrics=null;
-  lastSkeletonSnapshot=null; // free snapshot memory
-  document.getElementById('action-btn').textContent='Start Analysis';
-  document.getElementById('action-btn').classList.remove('recording','done');
-  document.getElementById('state-dot').className='';
-  document.getElementById('state-text').textContent='Ready';
-  document.getElementById('timer').classList.remove('show');
-  document.getElementById('timer').textContent='00:00';
-  document.getElementById('panel').classList.add('hidden');
-  document.getElementById('result-overlay').classList.remove('show');
-  // Reset metric displays
-  ['m-cadence','m-stride-time','m-step-length','m-symmetry','m-trunk','m-knee','m-hip','m-var','m-stance','m-swing','m-double','m-status'].forEach(id=>{
-    document.getElementById(id).textContent='--';
-  });
-  document.getElementById('speed-value').textContent='--';
-  document.getElementById('speed-value').style.color='#dde';
-  document.getElementById('speed-label').textContent='Waiting for analysis';
-  document.getElementById('speed-label').style.color='#888';
-  document.getElementById('speed-marker').style.left='0%';
-  document.getElementById('status-bar').style.background='#444';
-}
+// ── Detection Loop ──
+async function detect() {
+  if (!detector) return;
 
-function showResults(){
-  const m=finalMetrics;
-  const ov=document.getElementById('result-overlay');
-  if(!m){ov.classList.add('show');return;}
-  const si=speedInfo(m.speedMps);
-  document.getElementById('r-speed').textContent=m.speedMps>0?m.speedMps.toFixed(3)+' m/s':'N/A';
-  document.getElementById('r-speed').style.color=si.color;
-  document.getElementById('r-rating').textContent=si.label;
-  document.getElementById('r-rating').style.color=si.color;
-  document.getElementById('r-cadence').textContent=m.cadence>0?m.cadence.toFixed(1)+' spm':'--';
-  document.getElementById('r-stride').textContent=m.strideTime>0?m.strideTime.toFixed(3)+' s':'--';
-  document.getElementById('r-step').textContent=m.stepLength>0?m.stepLength.toFixed(1)+' px':'--';
-  document.getElementById('r-sym').textContent=m.symmetry.toFixed(1)+' %';
-  document.getElementById('r-var').textContent=m.variability.toFixed(1)+' CV%';
-  document.getElementById('r-trunk').textContent=m.trunkLean.toFixed(1)+' deg';
-  document.getElementById('r-knee').textContent=m.kneeL.toFixed(0)+' / '+m.kneeR.toFixed(0)+' deg';
-  document.getElementById('r-stance').textContent=m.stancePct.toFixed(1)+' %';
-  const mm=Math.floor(recordDuration/60),ss=Math.floor(recordDuration%60);
-  document.getElementById('r-duration').textContent=`${mm}m ${ss}s`;
-  ov.classList.add('show');
-}
-
-document.getElementById('result-close').addEventListener('click',()=>{
-  document.getElementById('result-overlay').classList.remove('show');
-});
-document.getElementById('result-new').addEventListener('click',()=>{
-  resetToIdle();
-});
-
-// ── Privacy (Skeleton) toggle ──
-document.getElementById('btn-privacy').addEventListener('click',()=>{
-  privacyMode=!privacyMode;
-  const btn=document.getElementById('btn-privacy');
-  const container=document.getElementById('container');
-  if(privacyMode){
-    btn.classList.add('active');
-    btn.textContent='Skeleton ON';
-    container.classList.add('privacy-on');
-  }else{
-    btn.classList.remove('active');
-    btn.textContent='Skeleton';
-    container.classList.remove('privacy-on');
+  let poses;
+  try {
+    poses = await detector.estimatePoses(video);
+  } catch(e) {
+    console.error('탐지 오류:', e);
+    animId = null;
+    return;
   }
-});
+  const now = performance.now();
+  const dt = now - lastTime;
+  lastTime = now;
+  fpsSmooth = fpsSmooth * 0.9 + (1000/dt) * 0.1;
 
-// ── Save result image ──
-document.getElementById('result-save').addEventListener('click', saveResultImage);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-function captureSkeletonSnapshot(){
-  // Draw skeleton on black background and save as image data
-  const sw=canvas.width, sh=canvas.height;
-  const snapCanvas=document.createElement('canvas');
-  snapCanvas.width=sw; snapCanvas.height=sh;
-  const sctx=snapCanvas.getContext('2d');
-  // Black background
-  sctx.fillStyle='#0a0a1a';
-  sctx.fillRect(0,0,sw,sh);
-  // Copy current skeleton from main canvas (already has skeleton drawn)
-  sctx.drawImage(canvas,0,0);
-  lastSkeletonSnapshot=snapCanvas;
+  let metrics = null;
+  if (poses.length > 0 && poses[0].keypoints) {
+    const kps = poses[0].keypoints;
+    drawSkeleton(kps);
+    metrics = analyzer.update(kps);
+
+    // Track best skeleton frame (throttled capture: max once per 2s)
+    const frameScore = kps.reduce((sum, kp) => sum + kp.score, 0);
+    if (frameScore > bestFrameScore) {
+      bestFrameScore = frameScore;
+      bestFrameKeypoints = kps.map(kp => ({...kp}));
+      const captureNow = performance.now();
+      if (captureNow - lastBestCaptureTime > 2000) {
+        lastBestCaptureTime = captureNow;
+        try {
+          bestFrameImageData = canvas.toDataURL('image/png');
+        } catch(e) { console.warn('toDataURL 실패:', e); }
+      }
+    }
+  }
+
+  if (metrics) lastMetrics = metrics;
+
+  const elapsed = analysisStartTime ? (now - analysisStartTime) / 1000 : 0;
+  updateUI(metrics, fpsSmooth, elapsed);
+  animId = requestAnimationFrame(detect);
 }
 
-function saveResultImage(){
-  const m=finalMetrics;
-  if(!m&&!lastSkeletonSnapshot){alert('No analysis data');return;}
+function drawSkeleton(kps) {
+  for (const [i, j] of SKELETON) {
+    const p1 = kps[i], p2 = kps[j];
+    if (p1.score > 0.3 && p2.score > 0.3) {
+      const c = getJointColor(Math.max(i, j));
+      ctx.strokeStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.lineWidth = i >= L_HIP && j >= L_HIP ? 4 : 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
+  }
 
-  const W=1080, H=1920; // portrait HD
-  const ec=document.getElementById('export-canvas');
-  ec.width=W; ec.height=H;
-  const c=ec.getContext('2d');
+  for (let i = 0; i < 17; i++) {
+    const p = kps[i];
+    if (p.score > 0.3) {
+      const c = getJointColor(i);
+      const r = i >= L_HIP ? 7 : 5;
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  // Ankle trail
+  const la = kps[L_ANKLE];
+  if (la.score > 0.3) {
+    trailPts.push({x: la.x, y: la.y});
+    if (trailPts.length > MAX_TRAIL) trailPts.shift();
+  }
+  for (let i = 1; i < trailPts.length; i++) {
+    const a = i / trailPts.length;
+    ctx.strokeStyle = `rgba(${Math.floor(50+200*a)},${Math.floor(100*(1-a))},${Math.floor(255*a)},${a})`;
+    ctx.lineWidth = Math.max(1, Math.floor(3*a));
+    ctx.beginPath();
+    ctx.moveTo(trailPts[i-1].x, trailPts[i-1].y);
+    ctx.lineTo(trailPts[i].x, trailPts[i].y);
+    ctx.stroke();
+  }
+}
+
+function formatDuration(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function updateUI(m, fps, elapsed) {
+  document.getElementById('fps-badge').textContent = `${Math.round(fps)} FPS`;
+  document.getElementById('m-duration').textContent = elapsed > 0 ? formatDuration(elapsed) : '--';
+
+  if (!m) return;
+
+  const si = getSpeedInfo(m.gaitSpeedMps);
+  document.getElementById('speed-value').textContent = m.gaitSpeedMps > 0 ? m.gaitSpeedMps.toFixed(2) : '--';
+  document.getElementById('speed-value').style.color = si.color;
+  document.getElementById('speed-label').textContent = `WHO-ICOPE: ${si.label}`;
+  document.getElementById('speed-label').style.color = si.color;
+
+  const pct = Math.min(m.gaitSpeedMps / 2.0 * 100, 100);
+  document.getElementById('speed-marker').style.left = pct + '%';
+
+  const statusColors = { normal: '#32cd32', caution: '#ffcc00', warning: '#ff3333' };
+  document.getElementById('status-bar').style.background = statusColors[m.status] || '#888';
+
+  document.getElementById('m-cadence').textContent = m.cadence > 0 ? `${m.cadence.toFixed(0)} spm` : '--';
+  document.getElementById('m-stride-time').textContent = m.strideTime > 0 ? `${m.strideTime.toFixed(2)} s` : '--';
+  document.getElementById('m-step-length').textContent = m.stepLength > 0 ? `${m.stepLength.toFixed(0)} px` : '--';
+  document.getElementById('m-symmetry').textContent = `${m.symmetry.toFixed(1)} %`;
+  document.getElementById('m-variability').textContent = `${m.variability.toFixed(1)} CV%`;
+  document.getElementById('m-trunk').textContent = `${m.trunkLean.toFixed(1)} deg`;
+  document.getElementById('m-knee').textContent = `${m.kneeAngleL.toFixed(0)} / ${m.kneeAngleR.toFixed(0)} deg`;
+  document.getElementById('m-hip').textContent = `${m.hipAngleL.toFixed(0)} / ${m.hipAngleR.toFixed(0)} deg`;
+  document.getElementById('m-stance').textContent = `${m.stancePct.toFixed(1)} %`;
+  document.getElementById('m-swing').textContent = `${m.swingPct.toFixed(1)} %`;
+  document.getElementById('m-double').textContent = `${m.doubleSupportPct.toFixed(1)} %`;
+}
+
+// ── Stop & Save (분석 종료) ──
+stopBtn.addEventListener('click', async () => {
+  // Stop detection loop
+  if (animId) {
+    cancelAnimationFrame(animId);
+    animId = null;
+  }
+
+  const elapsed = analysisStartTime ? (performance.now() - analysisStartTime) / 1000 : 0;
+  stopBtn.style.display = 'none';
+
+  // Build result image (await render completion before showing)
+  await renderResultImage(elapsed);
+  resultScreen.classList.add('active');
+});
+
+async function renderResultImage(elapsed) {
+  const rc = resultCanvas;
+  const rctx = rc.getContext('2d');
+  const W = 720, skeletonH = 540;
+  const reportLines = buildReportLines(elapsed);
+  const lineH = 32;
+  const reportH = reportLines.length * lineH + 60;
+  const totalH = skeletonH + reportH;
+  rc.width = W;
+  rc.height = totalH;
 
   // Background
-  c.fillStyle='#0a0a1a';
-  c.fillRect(0,0,W,H);
+  rctx.fillStyle = '#0a0a1a';
+  rctx.fillRect(0, 0, W, totalH);
 
-  // ── Top section: Skeleton image ──
-  const skelH=Math.floor(H*0.45);
-  if(lastSkeletonSnapshot){
-    // Draw skeleton snapshot scaled to fit
-    const srcW=lastSkeletonSnapshot.width, srcH=lastSkeletonSnapshot.height;
-    const scale=Math.min(W/srcW, skelH/srcH);
-    const dw=srcW*scale, dh=srcH*scale;
-    const dx=(W-dw)/2, dy=(skelH-dh)/2;
-    c.drawImage(lastSkeletonSnapshot, dx, dy, dw, dh);
-  }
-
-  // Separator line
-  let y=skelH+10;
-  c.strokeStyle='rgba(100,200,255,0.3)';
-  c.lineWidth=1;
-  c.beginPath(); c.moveTo(40,y); c.lineTo(W-40,y); c.stroke();
-
-  // ── Header ──
-  y+=40;
-  c.font='bold 36px -apple-system, sans-serif';
-  c.fillStyle='#64c8ff';
-  c.textAlign='center';
-  c.fillText('Dignif-Eye Gait Analysis', W/2, y);
-
-  y+=28;
-  c.font='16px -apple-system, sans-serif';
-  c.fillStyle='#888';
-  const now=new Date();
-  c.fillText(now.toLocaleDateString('ko-KR')+' '+now.toLocaleTimeString('ko-KR'), W/2, y);
-
-  // ── Speed (big) ──
-  y+=50;
-  const si=m?speedInfo(m.speedMps):{label:'N/A',color:'#888'};
-  c.font='bold 56px -apple-system, sans-serif';
-  c.fillStyle=si.color;
-  c.fillText(m&&m.speedMps>0?m.speedMps.toFixed(3)+' m/s':'-- m/s', W/2, y);
-
-  y+=32;
-  c.font='bold 20px -apple-system, sans-serif';
-  c.fillStyle=si.color;
-  c.fillText('WHO-ICOPE: '+si.label, W/2, y);
-
-  // ── WHO gauge bar ──
-  y+=20;
-  const gx=80, gw=W-160, gh=10;
-  const grd=c.createLinearGradient(gx,0,gx+gw,0);
-  grd.addColorStop(0,'#ff3333'); grd.addColorStop(0.3,'#ff3333');
-  grd.addColorStop(0.3,'#ff8800'); grd.addColorStop(0.4,'#ff8800');
-  grd.addColorStop(0.4,'#ffcc00'); grd.addColorStop(0.5,'#ffcc00');
-  grd.addColorStop(0.5,'#32cd32'); grd.addColorStop(1,'#32cd32');
-  c.fillStyle=grd;
-  c.beginPath(); c.roundRect(gx,y,gw,gh,5); c.fill();
-  if(m&&m.speedMps>0){
-    const mx=gx+Math.min(m.speedMps/2,1)*gw;
-    c.fillStyle='#fff';
-    c.fillRect(mx-2,y-3,4,gh+6);
-  }
-
-  // ── Results table ──
-  y+=50;
-  c.textAlign='left';
-
-  function drawSection(title, rows){
-    c.font='bold 14px -apple-system, sans-serif';
-    c.fillStyle='#64c8ff';
-    c.fillText(title.toUpperCase(), 60, y);
-    y+=4;
-    c.strokeStyle='rgba(100,200,255,0.15)';
-    c.beginPath(); c.moveTo(60,y); c.lineTo(W-60,y); c.stroke();
-    y+=24;
-
-    for(const[label,value]of rows){
-      c.font='15px -apple-system, sans-serif';
-      c.fillStyle='#a0a0c0';
-      c.fillText(label, 80, y);
-      c.fillStyle='#eef';
-      c.font='bold 15px -apple-system, sans-serif';
-      c.textAlign='right';
-      c.fillText(value, W-80, y);
-      c.textAlign='left';
-      y+=28;
-    }
-    y+=8;
-  }
-
-  if(m){
-    const mm=Math.floor(recordDuration/60),ss=Math.floor(recordDuration%60);
-    drawSection('Spatiotemporal',[
-      ['Cadence', m.cadence>0?m.cadence.toFixed(1)+' spm':'--'],
-      ['Stride Time', m.strideTime>0?m.strideTime.toFixed(3)+' s':'--'],
-      ['Step Length', m.stepLength>0?m.stepLength.toFixed(1)+' px':'--'],
-      ['Symmetry', m.symmetry.toFixed(1)+' %'],
-      ['Variability', m.variability.toFixed(1)+' CV%'],
-    ]);
-    drawSection('Kinematics',[
-      ['Trunk Lean', m.trunkLean.toFixed(1)+' deg'],
-      ['Hip Angle (L/R)', m.hipL.toFixed(0)+' / '+m.hipR.toFixed(0)+' deg'],
-      ['Knee Angle (L/R)', m.kneeL.toFixed(0)+' / '+m.kneeR.toFixed(0)+' deg'],
-    ]);
-    drawSection('Gait Phase',[
-      ['Stance Phase', m.stancePct.toFixed(1)+' %'],
-      ['Swing Phase', m.swingPct.toFixed(1)+' %'],
-      ['Double Support', m.doublePct.toFixed(1)+' %'],
-      ['Duration', mm+'m '+ss+'s'],
-    ]);
-  }
-
-  // ── Footer ──
-  c.textAlign='center';
-  c.font='12px -apple-system, sans-serif';
-  c.fillStyle='#555';
-  c.fillText('Dignif-Eye | Privacy Protected | Skeleton Only', W/2, H-20);
-
-  // ── Download / Share ──
-  ec.toBlob(function(blob){
-    if(!blob) return;
-    const file=new File([blob],'dignif-eye-result.png',{type:'image/png'});
-
-    // Try Web Share API first (works on iOS/Android)
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      navigator.share({files:[file],title:'Dignif-Eye Result'}).catch(()=>{
-        fallbackDownload(blob);
-      });
-    }else{
-      fallbackDownload(blob);
-    }
-  },'image/png');
-}
-
-function fallbackDownload(blob){
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download='dignif-eye-result.png';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),5000);
-}
-
-// ── Camera switch ──
-document.getElementById('btn-camera-switch').addEventListener('click',async()=>{
-  selectedFacing=selectedFacing==='environment'?'user':'environment';
-  try{
-    const stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:selectedFacing,width:{ideal:1280},height:{ideal:720}},audio:false
+  // Draw best skeleton frame image or fallback
+  if (bestFrameImageData) {
+    await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try { rctx.drawImage(video, 0, 0, W, skeletonH); } catch(e) {
+          rctx.fillStyle = '#1a1a2e'; rctx.fillRect(0, 0, W, skeletonH);
+        }
+        rctx.drawImage(img, 0, 0, W, skeletonH);
+        resolve();
+      };
+      img.onerror = reject;
+      img.src = bestFrameImageData;
     });
-    // Stop old tracks
-    if(video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
-    video.srcObject=stream; await video.play();
-    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-    const settings=stream.getVideoTracks()[0].getSettings();
-    if(settings.frameRate && analyzer) analyzer.fps=settings.frameRate;
-  }catch(e){
-    console.warn('Camera switch failed:',e);
+  } else {
+    try { rctx.drawImage(video, 0, 0, W, skeletonH); } catch(e) {
+      rctx.fillStyle = '#1a1a2e'; rctx.fillRect(0, 0, W, skeletonH);
+      rctx.fillStyle = '#888'; rctx.font = '18px sans-serif'; rctx.textAlign = 'center';
+      rctx.fillText('영상 캡처 불가 (보안 제한)', W / 2, skeletonH / 2);
+    }
+    if (bestFrameKeypoints) {
+      drawSkeletonOnContext(rctx, bestFrameKeypoints, W, skeletonH);
+    }
   }
+  drawReportText(rctx, reportLines, W, skeletonH, lineH);
+}
+
+function drawSkeletonOnContext(rctx, kps, w, h) {
+  const sx = w / canvas.width;
+  const sy = h / canvas.height;
+  for (const [i, j] of SKELETON) {
+    const p1 = kps[i], p2 = kps[j];
+    if (p1.score > 0.3 && p2.score > 0.3) {
+      const c = getJointColor(Math.max(i, j));
+      rctx.strokeStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      rctx.lineWidth = 4;
+      rctx.lineCap = 'round';
+      rctx.beginPath();
+      rctx.moveTo(p1.x * sx, p1.y * sy);
+      rctx.lineTo(p2.x * sx, p2.y * sy);
+      rctx.stroke();
+    }
+  }
+  for (let i = 0; i < 17; i++) {
+    const p = kps[i];
+    if (p.score > 0.3) {
+      const c = getJointColor(i);
+      rctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      rctx.beginPath();
+      rctx.arc(p.x * sx, p.y * sy, 6, 0, Math.PI*2);
+      rctx.fill();
+      rctx.strokeStyle = '#fff';
+      rctx.lineWidth = 2;
+      rctx.stroke();
+    }
+  }
+}
+
+function buildReportLines(elapsed) {
+  const m = lastMetrics;
+  const lines = [];
+  lines.push({ text: 'Dignif-Eye 보행 분석 결과', color: '#64c8ff', size: 26, bold: true });
+  lines.push({ text: '', color: '', size: 10 });
+
+  if (m) {
+    const si = getSpeedInfo(m.gaitSpeedMps);
+    lines.push({ text: `보행 속도: ${m.gaitSpeedMps > 0 ? m.gaitSpeedMps.toFixed(2) : '--'} m/s  (WHO-ICOPE: ${si.label})`, color: si.color, size: 22, bold: true });
+    lines.push({ text: '', color: '', size: 8 });
+    lines.push({ text: '[ 시공간 지표 ]', color: '#64c8ff', size: 20 });
+    lines.push({ text: `분당 걸음수: ${m.cadence > 0 ? m.cadence.toFixed(0) + ' spm' : '--'}`, color: '#dde', size: 20 });
+    lines.push({ text: `보폭 시간: ${m.strideTime > 0 ? m.strideTime.toFixed(2) + ' s' : '--'}`, color: '#dde', size: 20 });
+    lines.push({ text: `보폭 길이: ${m.stepLength > 0 ? m.stepLength.toFixed(0) + ' px' : '--'}`, color: '#dde', size: 20 });
+    lines.push({ text: `대칭성: ${m.symmetry.toFixed(1)} %`, color: '#dde', size: 20 });
+    lines.push({ text: `변동성: ${m.variability.toFixed(1)} CV%`, color: '#dde', size: 20 });
+    lines.push({ text: '', color: '', size: 8 });
+    lines.push({ text: '[ 운동학 지표 ]', color: '#64c8ff', size: 20 });
+    lines.push({ text: `체간 기울기: ${m.trunkLean.toFixed(1)} deg`, color: '#dde', size: 20 });
+    lines.push({ text: `무릎 각도 (좌/우): ${m.kneeAngleL.toFixed(0)} / ${m.kneeAngleR.toFixed(0)} deg`, color: '#dde', size: 20 });
+    lines.push({ text: `고관절 각도 (좌/우): ${m.hipAngleL.toFixed(0)} / ${m.hipAngleR.toFixed(0)} deg`, color: '#dde', size: 20 });
+    lines.push({ text: '', color: '', size: 8 });
+    lines.push({ text: '[ 보행 주기 ]', color: '#64c8ff', size: 20 });
+    lines.push({ text: `입각기: ${m.stancePct.toFixed(1)} %`, color: '#dde', size: 20 });
+    lines.push({ text: `유각기: ${m.swingPct.toFixed(1)} %`, color: '#dde', size: 20 });
+    lines.push({ text: `양하지 지지: ${m.doubleSupportPct.toFixed(1)} %`, color: '#dde', size: 20 });
+  } else {
+    lines.push({ text: '분석 데이터 없음', color: '#888', size: 20 });
+  }
+
+  lines.push({ text: '', color: '', size: 8 });
+  lines.push({ text: `측정 시간: ${formatDuration(elapsed)}`, color: '#a0a0c0', size: 20 });
+  return lines;
+}
+
+function drawReportText(rctx, lines, W, startY, lineH) {
+  let y = startY + 30;
+  for (const line of lines) {
+    if (!line.text) { y += line.size || 8; continue; }
+    const fontSize = line.size || 20;
+    rctx.font = `${line.bold ? 'bold ' : ''}${fontSize}px -apple-system, BlinkMacSystemFont, 'SF Pro', sans-serif`;
+    rctx.fillStyle = line.color || '#dde';
+    rctx.textAlign = 'left';
+    rctx.fillText(line.text, 24, y);
+    y += lineH;
+  }
+}
+
+// ── Save Image ──
+saveImgBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = `dignif-eye-result-${Date.now()}.png`;
+  link.href = resultCanvas.toDataURL('image/png');
+  link.click();
+});
+
+// ── Restart ──
+restartBtn.addEventListener('click', () => {
+  resultScreen.classList.remove('active');
+
+  // Reset state
+  analyzer.reset();
+  trailPts = [];
+  lastMetrics = null;
+  bestFrameScore = 0;
+  bestFrameKeypoints = null;
+  bestFrameImageData = null;
+  lastBestCaptureTime = 0;
+  analysisStartTime = performance.now();
+  lastTime = performance.now();
+  fpsSmooth = 0;
+  currentZoom = 1.0;
+  videoCanvasWrap.style.transform = '';
+
+  // Reset UI values
+  document.getElementById('speed-value').textContent = '--';
+  document.getElementById('speed-value').style.color = '';
+  document.getElementById('speed-label').textContent = '대기 중...';
+  document.getElementById('speed-label').style.color = '#888';
+  document.getElementById('speed-marker').style.left = '0%';
+  document.getElementById('status-bar').style.background = '#888';
+  document.getElementById('m-cadence').textContent = '--';
+  document.getElementById('m-stride-time').textContent = '--';
+  document.getElementById('m-step-length').textContent = '--';
+  document.getElementById('m-symmetry').textContent = '--';
+  document.getElementById('m-variability').textContent = '--';
+  document.getElementById('m-duration').textContent = '--';
+  document.getElementById('m-trunk').textContent = '--';
+  document.getElementById('m-knee').textContent = '--';
+  document.getElementById('m-hip').textContent = '--';
+  document.getElementById('m-stance').textContent = '--';
+  document.getElementById('m-swing').textContent = '--';
+  document.getElementById('m-double').textContent = '--';
+
+  stopBtn.style.display = 'block';
+  detect();
 });
 </script>
 </body>
